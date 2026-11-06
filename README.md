@@ -26,8 +26,8 @@ your own Home Assistant action sequences.
 - Short in-memory recent event history and a compact, responsive Lovelace card.
 - Enrollment workflow: enter an available ID, person's name and profile; only
   save the authorization **after** ESPHome emits `_enrollment_done` for that ID.
-- Refuse unknown IDs, invalid records, missing action sequences and concurrent
-  access requests (no queued delayed unlocks).
+- Refuse unknown IDs, invalid records, and missing action sequences. Suppress
+  rapid repeat events within 1.5 seconds, without queuing delayed unlocks.
 - On removal: revoke access in Home Assistant **before** requesting hardware deletion.
 - Read-only summary sensor with a dynamic list of people and their access profiles.
 - Manage identities using the integration's **Configure** flow (no text-list helpers).
