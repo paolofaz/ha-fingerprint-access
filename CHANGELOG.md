@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (proposed for next release)
+
+- Reduce the Home Assistant backend's global per-reader matching cooldown from
+  2.5 seconds to 2.0 seconds. ESPHome event reporting and authorization policy
+  stay unchanged.
+- Add a regression test covering a rejected scan at 1.999 seconds and an
+  accepted scan at exactly 2.0 seconds.
+
+
 ## 1.0.0rc4 — 2026-11-06
 
 - Remove the action-duration lock that blocked new scans during 90-second
