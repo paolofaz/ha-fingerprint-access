@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Add a fingerprint reader",
-        "description": "Enter the ESPHome event prefix, without _finger_matched (example: esphome.impronte3q). The corresponding ESPHome actions must be named <node>_enroll, <node>_cancel_enroll and <node>_delete.",
+        "description": "Enter the ESPHome event prefix, without _finger_matched (example: esphome.impronte3q). The corresponding ESPHome actions must be named reader_enroll, reader_cancel_enroll and reader_delete.",
         "data": {
           "event_prefix": "ESPHome event prefix"
         }
@@ -17,7 +17,7 @@
       }
     },
     "error": {
-      "invalid_prefix": "Use esphome.<node_name> with lowercase letters, numbers and underscores.",
+      "invalid_prefix": "Use esphome.reader_name with lowercase letters, numbers and underscores.",
       "already_configured": "Another reader already uses this event prefix.",
       "enrollment_in_progress": "Finish or cancel enrollment before changing the event prefix."
     },

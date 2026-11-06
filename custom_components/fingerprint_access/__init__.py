@@ -21,6 +21,7 @@ from .manager import FingerprintManager
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 def _runtime(hass: HomeAssistant, call: ServiceCall) -> FingerprintManager:
