@@ -13,5 +13,5 @@
   "integration_type": "hub",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/paolofaz/ha-fingerprint-access/issues",
-  "version": "1.0.0rc3"
+  "version": "1.0.0rc4"
 }

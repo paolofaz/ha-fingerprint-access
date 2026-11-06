@@ -15,7 +15,7 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
-from homeassistant.helpers.script import SCRIPT_MODE_SINGLE, Script
+from homeassistant.helpers.script import SCRIPT_MODE_RESTART, Script
 from homeassistant.helpers.storage import Store
 
 from .const import (
@@ -58,7 +58,8 @@ class FingerprintManager:
         self.people: dict[str, dict[str, str]] = {}
         self._store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
         self._write_lock = asyncio.Lock()
-        self._action_lock = asyncio.Lock()
+        self._action_script: Script | None = None
+        self._dispatch_serial = 0
         self._enrollment_lock = asyncio.Lock()
         self._last_dispatched = 0.0
         self._post_enrollment_holdoff_until = 0.0
@@ -117,7 +118,7 @@ class FingerprintManager:
         if status in {
             "denied", "invalid_id", "user_event_ignored", "cooldown_ignored",
             "post_enrollment_ignored",
-            "busy_ignored", "action_executed", "action_failed",
+            "busy_ignored", "action_started", "action_executed", "action_failed",
             "no_actions_configured", "enrollment_saved", "enrollment_failed",
             "enrollment_timeout", "enrollment_save_failed",
             "enrollment_start_failed", "access_revoked",
@@ -156,8 +157,51 @@ class FingerprintManager:
             return
         self.hass.async_create_task(self.async_handle_match(event))
 
+    def _get_action_script(self) -> Script:
+        """One reusable restart-mode script, shared by both profiles."""
+        if self._action_script is None:
+            choices = []
+            for profile, key in (("full", CONF_FULL_ACTIONS), ("partial", CONF_PARTIAL_ACTIONS)):
+                actions = self.entry.options.get(key, [])
+                if isinstance(actions, list) and actions:
+                    choices.append({
+                        "conditions": [{
+                            "condition": "template",
+                            "value_template": "{{ profile == '" + profile + "' }}",
+                        }],
+                        "sequence": actions,
+                    })
+            self._action_script = Script(
+                self.hass, [{"choose": choices}],
+                name="Fingerprint Access", domain=DOMAIN,
+                script_mode=SCRIPT_MODE_RESTART,
+            )
+        return self._action_script
+
+    async def _run_action_script(
+        self, serial: int, slot: int, person: dict[str, str],
+        profile: str, context: Any,
+    ) -> None:
+        """Run asynchronously; a 90-second delay never holds up new fingerprints."""
+        try:
+            await self._get_action_script().async_run(
+                {"finger_id": slot, "person_name": person["name"], "profile": profile},
+                context=context,
+            )
+        except asyncio.CancelledError:
+            # An authorized subsequent read may have restarted this script.
+            raise
+        except Exception:
+            _LOGGER.exception("Fingerprint access action sequence failed")
+            if serial == self._dispatch_serial:
+                self._status("action_failed", slot, profile=profile)
+            return
+        if serial == self._dispatch_serial:
+            # Sequence completed, but physical opening is not independently verified.
+            self._status("action_executed", slot, name=person["name"], profile=profile)
+
     async def async_handle_match(self, event: Event) -> None:
-        """Authorize only the slot in this single scan event."""
+        """Authorize an atomic match; restart long-running actions after cooldown."""
         slot = parse_slot(event.data.get("finger_id"))
         if slot is None:
             self._status("invalid_id")
@@ -172,45 +216,35 @@ class FingerprintManager:
         if person is None:
             self._status("denied", slot)
             return
-        # Ignore overlapping requests: never queue a delayed door unlock.
-        if self._action_lock.locked():
-            self._status("busy_ignored", slot)
+        profile = person["profile"]
+        actions = self.entry.options.get(
+            CONF_FULL_ACTIONS if profile == PROFILE_FULL else CONF_PARTIAL_ACTIONS, []
+        )
+        if not isinstance(actions, list) or not actions:
+            self._status("no_actions_configured", slot, profile=profile)
             return
 
-        async with self._action_lock:
-            person = lookup_person(self.people, slot)  # Re-check revocation
-            if person is None or self.pending is not None:
-                self._status("denied", slot)
-                return
-            profile = person["profile"]
-            actions = self.entry.options.get(
-                CONF_FULL_ACTIONS if profile == PROFILE_FULL else CONF_PARTIAL_ACTIONS, []
-            )
-            if not isinstance(actions, list) or not actions:
-                self._status("no_actions_configured", slot, profile=profile)
-                return
+        # No await until cooldown is reserved: simultaneous scans cannot both open.
+        now = monotonic()
+        if cooldown_active(now, self._last_dispatched, MATCH_COOLDOWN_SECONDS):
+            self._status("cooldown_ignored", slot, profile=profile)
+            return
+        try:
+            self._get_action_script()
+        except Exception:
+            _LOGGER.exception("Cannot prepare Fingerprint Access action script")
+            self._status("action_failed", slot, profile=profile)
+            return
 
-            now = monotonic()
-            if cooldown_active(now, self._last_dispatched, MATCH_COOLDOWN_SECONDS):
-                self._status("cooldown_ignored", slot, profile=profile)
-                return
-            self._last_dispatched = now
-
-            sequence = Script(
-                self.hass, actions, name=f"Fingerprint Access {profile}",
-                domain=DOMAIN, script_mode=SCRIPT_MODE_SINGLE,
-            )
-            try:
-                await sequence.async_run(
-                    {"finger_id": slot, "person_name": person["name"], "profile": profile},
-                    context=event.context,
-                )
-            except Exception:
-                _LOGGER.exception("Fingerprint access action sequence failed")
-                self._status("action_failed", slot, profile=profile)
-                return
-            # The action was dispatched; hardware opening is not independently confirmed.
-            self._status("action_executed", slot, name=person["name"], profile=profile)
+        self._last_dispatched = now
+        self._dispatch_serial += 1
+        serial = self._dispatch_serial
+        self._status("action_started", slot, name=person["name"], profile=profile)
+        # This is the SAME SCRIPT for both profiles, with SCRIPT_MODE_RESTART.
+        # We never await a 90-second light-off timer in this event handler.
+        self.hass.async_create_task(
+            self._run_action_script(serial, slot, person, profile, event.context)
+        )
 
     @callback
     def _on_scan(self, event: Event) -> None:
@@ -367,5 +401,9 @@ class FingerprintManager:
         self._status("template_delete_requested", slot)
 
     async def shutdown(self) -> None:
-        """Clear transient state at unload; no pending request survives restart."""
+        """Stop the active action script and clear transient state."""
+        self._dispatch_serial += 1
         self._clear_pending()
+        if self._action_script is not None:
+            await self._action_script.async_unload()
+            self._action_script = None

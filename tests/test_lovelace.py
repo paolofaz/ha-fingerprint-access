@@ -132,7 +132,7 @@ class StaticIntegrationTests(unittest.TestCase):
 
     def test_manifest_and_frontend(self):
         manifest = json.loads((BASE / "manifest.json").read_text())
-        self.assertEqual(manifest["version"], "1.0.0rc3")
+        self.assertEqual(manifest["version"], "1.0.0rc4")
         self.assertIn("lovelace", manifest["dependencies"])
         self.assertIn("frontend", manifest["dependencies"])
         self.assertIn("http", manifest["dependencies"])

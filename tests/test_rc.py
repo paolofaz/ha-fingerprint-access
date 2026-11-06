@@ -20,7 +20,7 @@ class RCChecks(unittest.TestCase):
         for value in (
             "lookup_person(self.people, slot)", "no_actions_configured",
             "MATCH_COOLDOWN_SECONDS", "POST_ENROLLMENT_HOLDOFF_SECONDS",
-            "_enrollment_lock", "_action_lock.locked()", "_write_lock",
+            "_enrollment_lock", "SCRIPT_MODE_RESTART", "_write_lock",
             "user_event_ignored", "async_mutate",
         ):
             self.assertIn(value, source)
@@ -33,7 +33,7 @@ class RCChecks(unittest.TestCase):
 
     def test_brand_icon_and_version(self):
         obj = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(obj["version"], "1.0.0rc3")
+        self.assertEqual(obj["version"], "1.0.0rc4")
         self.assertTrue((ROOT / "brand" / "icon.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
 
 if __name__ == "__main__":

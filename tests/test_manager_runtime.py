@@ -38,13 +38,46 @@ class Event:
 
 class FakeScript:
     calls = []
+    instances = []
+    hold_runs = False
 
     def __init__(self, hass, actions, name, domain, script_mode):
         self.actions = actions
+        self.mode = script_mode
+        self.active_task = None
+        self.release = asyncio.Event()
+        self.unloaded = False
+        self.instances.append(self)
 
     async def async_run(self, variables, context=None):
-        self.calls.append((self.actions, variables))
-        return None
+        current = asyncio.current_task()
+        if self.mode == "restart" and self.active_task and not self.active_task.done():
+            previous = self.active_task
+            previous.cancel()
+            await asyncio.gather(previous, return_exceptions=True)
+        self.active_task = current
+        # Mock the HA choose action: select the exact configured profile.
+        choices = self.actions[0]["choose"]
+        matched = [
+            choice["sequence"] for choice in choices
+            if ("profile == '" + variables["profile"] + "'")
+            in choice["conditions"][0]["value_template"]
+        ]
+        assert len(matched) == 1
+        self.calls.append((matched[0], variables))
+        try:
+            if self.hold_runs:
+                await self.release.wait()
+        finally:
+            if self.active_task is current:
+                self.active_task = None
+
+    async def async_unload(self):
+        self.unloaded = True
+        if self.active_task and not self.active_task.done():
+            self.active_task.cancel()
+            await asyncio.gather(self.active_task, return_exceptions=True)
+
 
 
 class Store:
@@ -111,7 +144,7 @@ module("homeassistant.exceptions", HomeAssistantError=HomeAssistantError,
 module("homeassistant.helpers")
 module("homeassistant.helpers.dispatcher", async_dispatcher_send=lambda hass, signal: None)
 module("homeassistant.helpers.event", async_call_later=lambda hass, seconds, fn: lambda: None)
-module("homeassistant.helpers.script", SCRIPT_MODE_SINGLE="single", Script=FakeScript)
+module("homeassistant.helpers.script", SCRIPT_MODE_RESTART="restart", Script=FakeScript)
 module("homeassistant.helpers.storage", Store=Store)
 
 package = module("fingerprint_access_rc")
@@ -137,6 +170,8 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
         self.clock = 100.0
         manager_module.monotonic = lambda: self.clock
         FakeScript.calls = []
+        FakeScript.instances = []
+        FakeScript.hold_runs = False
 
     async def add(self, id, name, profile):
         await self.manager.async_mutate(
@@ -145,6 +180,11 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
 
     async def scan(self, id, user_id=None):
         await self.manager.async_handle_match(Event({"finger_id": id}, user_id=user_id))
+        for _ in range(4):
+            await asyncio.sleep(0)
+
+    async def asyncTearDown(self):
+        await self.manager.shutdown()
 
     async def test_unknown_id_is_denied(self):
         await self.scan(1)
@@ -171,6 +211,51 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
         self.clock += 3
         await self.scan(1)
         self.assertEqual(len(FakeScript.calls), 2)
+
+    async def test_restart_after_cooldown_even_with_90_second_action(self):
+        """Long running lights cannot lock out another authorized opening."""
+        FakeScript.hold_runs = True
+        await self.add(1, "A", "full")
+        await self.add(2, "B", "partial")
+        await self.scan(1)
+        self.assertEqual(self.manager.last_scan["status"], "action_started")
+        self.assertEqual(len(FakeScript.instances), 1)
+        active = FakeScript.instances[0]
+        self.assertEqual(active.mode, "restart")
+        first_task = active.active_task
+        self.assertIsNotNone(first_task)
+
+        self.clock += 1
+        await self.scan(2)
+        self.assertEqual(self.manager.last_scan["status"], "cooldown_ignored")
+        self.assertEqual(len(FakeScript.calls), 1)
+        self.assertFalse(first_task.done())
+
+        self.clock += 2
+        await self.scan(2)
+        self.assertEqual(len(FakeScript.calls), 2)
+        self.assertEqual([c[0][0]["action"] for c in FakeScript.calls],
+                         ["script.full", "script.partial"])
+        self.assertTrue(first_task.done())
+        self.assertEqual(self.manager.last_scan["status"], "action_started")
+        self.assertEqual(len(FakeScript.instances), 1)  # same restart script
+        self.assertIsNot(active.active_task, first_task)
+
+        active.release.set()
+        for _ in range(4):
+            await asyncio.sleep(0)
+        self.assertEqual(self.manager.last_scan["slot"], 2)
+        self.assertEqual(self.manager.last_scan["status"], "action_executed")
+
+    async def test_unload_stops_90_second_action(self):
+        FakeScript.hold_runs = True
+        await self.add(1, "A", "full")
+        await self.scan(1)
+        active = FakeScript.instances[0]
+        self.assertIsNotNone(active.active_task)
+        await self.manager.shutdown()
+        self.assertTrue(active.unloaded)
+        self.assertTrue(active.active_task is None or active.active_task.done())
 
     async def test_no_actions_never_opens(self):
         await self.add(1, "A", "full")

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.0rc4 — 2026-11-06
+
+- Remove the action-duration lock that blocked new scans during 90-second
+  light-off timers. Preserve the 2.5-second global cooldown.
+- Reuse one Home Assistant Script in restart mode across full and partial
+  profiles: new authorized fingerprints interrupt the prior sequence.
+- Start sequences asynchronously, show a prompt action-started status,
+  suppress stale completion reports and stop actions on integration unload.
+- Document that external scripts such as script.cancello3q must also use
+  mode: restart rather than parallel for correct timer reset.
+- Behavioral regression tests cover 90-second actions, cooldown, replacement
+  across different access profiles and unloading.
+- Lovelace auto-registration stays unchanged except the cache key.
+
+
 ## 1.0.0rc3 — 2026-11-06
 
 - Automatically register the Lovelace module resource **after HA startup**

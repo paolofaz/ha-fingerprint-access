@@ -1,4 +1,4 @@
-# Fingerprint Access for Home Assistant — 1.0.0rc3
+# Fingerprint Access for Home Assistant — 1.0.0rc4
 
 A custom Home Assistant integration for **ESPHome fingerprint readers**. It keeps names
 and access profiles in Home Assistant, processes **an event for each scan** and executes
@@ -192,7 +192,7 @@ The integration derives ESPHome action service names from the prefix:
 `esphome.impronte3q_cancel_enroll`,
 `esphome.impronte3q_delete`.
 
-## Lovelace card (RC3: automatic registration after HA startup)
+## Lovelace card (RC4: automatic registration after HA startup)
 
 Fingerprint Access serves its own JavaScript card and **automatically registers
 one Lovelace JavaScript module resource** in Home Assistant's resource storage
@@ -204,12 +204,12 @@ Marketplace has already had the opportunity to migrate its resources. It uses
 Home Assistant's supported collection API, checks only the exact Fingerprint
 Access URL, and never iterates through other entries to rewrite or remove them.
 An existing resource for this card is updated in place to
-`/fingerprint_access/fingerprint-access-card.js?v=100rc3`. Other resources
+`/fingerprint_access/fingerprint-access-card.js?v=100rc4`. Other resources
 belonging to Marketplace, uConnect, or other integrations are not edited.
 
 Steps:
 
-1. Update from the GitHub `main` branch to `1.0.0rc3`.
+1. Update from the GitHub `main` branch to `1.0.0rc4`.
 2. Restart Home Assistant, so the integration can register its static file
    and schedule resource registration after startup.
 3. Refresh the browser or restart the Home Assistant mobile app.
@@ -230,7 +230,7 @@ allow integrations to register resources automatically. In that case, add
 the following to your existing `lovelace: resources:` configuration:
 
 ```yaml
-- url: /fingerprint_access/fingerprint-access-card.js?v=100rc3
+- url: /fingerprint_access/fingerprint-access-card.js?v=100rc4
   type: module
 ```
 
@@ -242,6 +242,23 @@ Do not remove any resource that belongs to a different custom card.
 The fingerprint authorization register is independent from Lovelace resources
 and remains stored in Home Assistant's own `.storage` entry. The card is
 only the management UI; all access decisions are enforced by the backend.
+
+### Reopening while the 90-second light timer is running
+
+The RC4 no longer holds a lock throughout a configured action sequence. A
+successful, authorized recognition starts the sequence asynchronously, and
+a new successful recognition **after the global 2.5-second cooldown** restarts
+the previous Fingerprint Access action sequence, even when switching between
+full and partial access profiles. During enrollment and for 5 seconds after it
+ends, matching remains suspended.
+
+**For external Home Assistant scripts called in the configured actions**
+(e.g. `script.cancello3q`), set the **script entity's own mode to
+`restart`, not `parallel`**. Otherwise non-blocking script starts can leave
+an older 90-second timer running, and lights might go off too early.
+Stopping an action sequence does not undo hardware actions already executed,
+such as a gate pulse or unlocking a door. Do not use `mode: parallel` for
+a timer that must reset when a new fingerprint is accepted.
 
 ### Repeated fingerprints and event counter
 
