@@ -19,7 +19,7 @@ your own Home Assistant action sequences.
   `Store` API, not in the ESP8266's flash or editable permission helpers.
 - No test mode: a registered ID **immediately dispatches** the configured Full/Partial
   actions on a matching scan. An ID without an entry or without actions never opens.
-- 2.5-second cooldown between dispatched actions; no queued delayed unlocks.
+- 2-second cooldown between dispatched actions; no queued delayed unlocks.
 - 5-second holdoff after registration completion/cancellation to avoid an
   immediate unintended opening from a finger remaining on the reader.
 - Short in-memory recent event history and a compact, responsive Lovelace card.
@@ -247,7 +247,7 @@ only the management UI; all access decisions are enforced by the backend.
 
 The RC4 no longer holds a lock throughout a configured action sequence. A
 successful, authorized recognition starts the sequence asynchronously, and
-a new successful recognition **after the global 2.5-second cooldown** restarts
+a new successful recognition **after the global 2-second cooldown** restarts
 the previous Fingerprint Access action sequence, even when switching between
 full and partial access profiles. During enrollment and for 5 seconds after it
 ends, matching remains suspended.
@@ -355,7 +355,7 @@ License: MIT.
    after enrollment before testing a fresh touch.
 7. Register your relative with another ID and Partial access. Verify both
    physical action paths separately under supervision.
-8. Try rapid repeat scans (within 2.5 seconds) to verify the cooldown, and
+8. Try rapid repeat scans (within 2 seconds) to verify the cooldown, and
    repeat after several seconds to verify a new request can open.
 9. Restart Home Assistant and confirm the registry and both access profiles
    persist. Recheck behavior after reconnection/power recovery.
