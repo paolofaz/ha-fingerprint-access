@@ -5,6 +5,8 @@ registered only inside the isolated pytest Home Assistant fixture.
 """
 from __future__ import annotations
 
+import asyncio
+
 from homeassistant.core import Context, Event, HomeAssistant
 from pytest_homeassistant.common import MockConfigEntry
 
@@ -85,6 +87,61 @@ async def test_real_script_choose_authorizes_correct_profile(hass: HomeAssistant
         await hass.async_block_till_done()
         assert calls == [FULL, PARTIAL]
         assert manager.last_scan["status"] == "action_executed"
+    finally:
+        await manager.shutdown()
+
+
+async def test_real_script_restart_during_long_action(hass: HomeAssistant) -> None:
+    """A new authorized scan restarts a running 90-second sequence."""
+    calls: list[str] = []
+    full_called = asyncio.Event()
+    partial_called = asyncio.Event()
+
+    async def full(_call) -> None:
+        calls.append(FULL)
+        full_called.set()
+
+    async def partial(_call) -> None:
+        calls.append(PARTIAL)
+        partial_called.set()
+
+    hass.services.async_register("fingerprint_runtime_long", FULL, full)
+    hass.services.async_register("fingerprint_runtime_long", PARTIAL, partial)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_EVENT_PREFIX: EVENT_PREFIX},
+        options={
+            CONF_FULL_ACTIONS: [
+                {"action": "fingerprint_runtime_long.full"},
+                {"delay": {"seconds": 90}},
+            ],
+            CONF_PARTIAL_ACTIONS: [
+                {"action": "fingerprint_runtime_long.partial"},
+                {"delay": {"seconds": 90}},
+            ],
+        },
+    )
+    entry.add_to_hass(hass)
+    manager = FingerprintManager(hass, entry)
+    await manager.async_load()
+    await manager.async_mutate(
+        lambda current: {
+            **current,
+            "1": {"name": "Full tester", "profile": FULL},
+            "2": {"name": "Partial tester", "profile": PARTIAL},
+        }
+    )
+    try:
+        await manager.async_handle_match(_event(1))
+        await asyncio.wait_for(full_called.wait(), timeout=5)
+        assert calls == [FULL]
+        assert manager.last_scan["status"] == "action_started"
+
+        manager._last_dispatched -= 2
+        await manager.async_handle_match(_event(2))
+        await asyncio.wait_for(partial_called.wait(), timeout=5)
+        assert calls == [FULL, PARTIAL]
+        assert manager.last_scan["status"] == "action_started"
     finally:
         await manager.shutdown()
 
