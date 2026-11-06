@@ -1,0 +1,113 @@
+enroll:
+  name: Start fingerprint enrollment
+  description: Starts enrollment, granting access only after ESPHome confirms success.
+  fields:
+    entry_id:
+      name: Integration entry ID
+      description: Optional when only one reader is configured.
+      example: abc123
+      selector:
+        text:
+    finger_id:
+      name: Fingerprint slot
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 199
+          mode: box
+    name:
+      name: Person
+      required: true
+      selector:
+        text:
+    profile:
+      name: Access profile
+      required: true
+      selector:
+        select:
+          options:
+            - label: Full access
+              value: full
+            - label: Partial access
+              value: partial
+    num_scans:
+      name: Number of scans
+      selector:
+        number:
+          min: 2
+          max: 6
+          mode: box
+    confirm_free_slot:
+      name: Slot verified free
+      required: true
+      description: Explicit confirmation; the integration cannot read occupied slots.
+      selector:
+        boolean:
+
+cancel_enrollment:
+  name: Cancel fingerprint enrollment
+  description: Cancels the pending enrollment.
+  fields:
+    entry_id:
+      name: Integration entry ID
+      selector:
+        text:
+
+update_person:
+  name: Update person
+  description: Changes a stored name or access profile. Requires administrator permissions.
+  fields:
+    entry_id:
+      name: Integration entry ID
+      selector:
+        text:
+    finger_id:
+      name: Fingerprint slot
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 199
+          mode: box
+    name:
+      name: Person
+      required: true
+      selector:
+        text:
+    profile:
+      name: Access profile
+      required: true
+      selector:
+        select:
+          options:
+            - label: Full access
+              value: full
+            - label: Partial access
+              value: partial
+
+delete_person:
+  name: Revoke and delete fingerprint
+  description: Revokes access first, then requests deletion from the ESPHome reader.
+  fields:
+    entry_id:
+      name: Integration entry ID
+      selector:
+        text:
+    finger_id:
+      name: Fingerprint slot
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 199
+          mode: box
+
+list_people:
+  name: List enrolled people
+  description: Returns stored names, slots and assigned access profiles.
+  fields:
+    entry_id:
+      name: Integration entry ID
+      selector:
+        text:

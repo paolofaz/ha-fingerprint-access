@@ -1,0 +1,2 @@
+# The policy tests are standard-library only.
+# Runtime dependencies are provided by Home Assistant.

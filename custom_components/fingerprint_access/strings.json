@@ -1,0 +1,89 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a fingerprint reader",
+        "description": "Enter the ESPHome event prefix, without _finger_matched (example: esphome.impronte3q). The corresponding ESPHome actions must be named <node>_enroll, <node>_cancel_enroll and <node>_delete.",
+        "data": {
+          "event_prefix": "ESPHome event prefix"
+        }
+      }
+    },
+    "error": {
+      "invalid_prefix": "Use esphome.<node_name> with lowercase letters, numbers and underscores."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fingerprint Access",
+        "menu_options": {
+          "actions": "Configure access actions",
+          "enroll": "Register new fingerprint",
+          "manage": "Manage registered fingerprints",
+          "cancel": "Cancel enrollment"
+        }
+      },
+      "actions": {
+        "title": "Access profiles and actions",
+        "description": "Start in test mode. Each profile accepts any Home Assistant action sequence; no actions are executed while test mode is active. Available variables: finger_id, person_name, profile.",
+        "data": {
+          "test_mode": "Test mode (do not execute actions)",
+          "full_actions": "Full access - action sequence",
+          "partial_actions": "Partial access - action sequence"
+        }
+      },
+      "enroll": {
+        "title": "Enroll fingerprint",
+        "description": "The slot must be physically empty. Access is granted only after the reader confirms enrollment and the database is saved.",
+        "data": {
+          "finger_id": "Slot ID (1-199)",
+          "name": "Person's name",
+          "profile": "Access profile",
+          "num_scans": "Number of scans",
+          "confirm_free_slot": "I have verified this physical slot is empty"
+        }
+      },
+      "manage": {
+        "title": "Choose a fingerprint",
+        "data": {
+          "finger_id": "Person / ID"
+        }
+      },
+      "selected": {
+        "title": "Manage selected fingerprint",
+        "menu_options": {
+          "edit": "Edit name / access",
+          "remove": "Revoke access and delete fingerprint"
+        }
+      },
+      "edit": {
+        "title": "Edit fingerprint",
+        "data": {
+          "name": "Person's name",
+          "profile": "Access profile"
+        }
+      },
+      "remove": {
+        "title": "Delete fingerprint",
+        "description": "The authorization is revoked on disk BEFORE the deletion command is sent to the reader. This cannot be undone automatically.",
+        "data": {
+          "confirm_remove": "Confirm permanent revocation and fingerprint deletion"
+        }
+      }
+    },
+    "error": {
+      "operation_failed": "The operation failed. Check Home Assistant logs and ESPHome availability.",
+      "confirmation_required": "You must explicitly confirm deletion."
+    },
+    "abort": {
+      "enrollment_started": "Enrollment started. Follow the reader LEDs and check the registered fingerprints sensor.",
+      "enrollment_cancelled": "Enrollment cancelled.",
+      "cancel_failed": "Cancellation could not reach the reader.",
+      "person_updated": "Person updated.",
+      "person_removed": "Authorization revoked and physical deletion requested.",
+      "deletion_check_hardware": "Access was revoked; physical deletion may have failed. Check the reader.",
+      "no_people": "No registered people are in the database."
+    }
+  }
+}
