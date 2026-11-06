@@ -1,4 +1,4 @@
-# Fingerprint Access for Home Assistant — 1.0.0rc4
+# Fingerprint Access for Home Assistant — 1.0.0rc5
 
 A custom Home Assistant integration for **ESPHome fingerprint readers**. It keeps names
 and access profiles in Home Assistant, processes **an event for each scan** and executes
@@ -19,7 +19,7 @@ your own Home Assistant action sequences.
   `Store` API, not in the ESP8266's flash or editable permission helpers.
 - No test mode: a registered ID **immediately dispatches** the configured Full/Partial
   actions on a matching scan. An ID without an entry or without actions never opens.
-- 2.5-second cooldown between dispatched actions; no queued delayed unlocks.
+- 1.5-second cooldown between dispatched actions; no queued delayed unlocks.
 - 5-second holdoff after registration completion/cancellation to avoid an
   immediate unintended opening from a finger remaining on the reader.
 - Short in-memory recent event history and a compact, responsive Lovelace card.
@@ -192,7 +192,7 @@ The integration derives ESPHome action service names from the prefix:
 `esphome.impronte3q_cancel_enroll`,
 `esphome.impronte3q_delete`.
 
-## Lovelace card (RC4: automatic registration after HA startup)
+## Lovelace card (RC5: automatic registration after HA startup)
 
 Fingerprint Access serves its own JavaScript card and **automatically registers
 one Lovelace JavaScript module resource** in Home Assistant's resource storage
@@ -204,12 +204,12 @@ Marketplace has already had the opportunity to migrate its resources. It uses
 Home Assistant's supported collection API, checks only the exact Fingerprint
 Access URL, and never iterates through other entries to rewrite or remove them.
 An existing resource for this card is updated in place to
-`/fingerprint_access/fingerprint-access-card.js?v=100rc4`. Other resources
+`/fingerprint_access/fingerprint-access-card.js?v=100rc5`. Other resources
 belonging to Marketplace, uConnect, or other integrations are not edited.
 
 Steps:
 
-1. Update from the GitHub `main` branch to `1.0.0rc4`.
+1. Update from the GitHub `main` branch to `1.0.0rc5`.
 2. Restart Home Assistant, so the integration can register its static file
    and schedule resource registration after startup.
 3. Refresh the browser or restart the Home Assistant mobile app.
@@ -230,7 +230,7 @@ allow integrations to register resources automatically. In that case, add
 the following to your existing `lovelace: resources:` configuration:
 
 ```yaml
-- url: /fingerprint_access/fingerprint-access-card.js?v=100rc4
+- url: /fingerprint_access/fingerprint-access-card.js?v=100rc5
   type: module
 ```
 
@@ -243,11 +243,24 @@ The fingerprint authorization register is independent from Lovelace resources
 and remains stored in Home Assistant's own `.storage` entry. The card is
 only the management UI; all access decisions are enforced by the backend.
 
+### RC5: Fix for action failure in Home Assistant 2026.11
+
+RC4 could recognize a fingerprint successfully but fail before running the
+configured profile's action sequence, logging
+`AttributeError: 'str' object has no attribute 'async_render_to_info'`.
+The choose-action's template condition was incorrectly passed as a plain
+string instead of a Home Assistant `Template` object. RC5 fixes that
+condition and includes a regression test for the template interface.
+
+The matching cooldown is now **1.5 seconds**. Matching remains suspended
+during enrollment and for 5 seconds after it ends. These safeguards do not
+fix a physically noisy reader, invalid ESPHome events or unavailable scripts.
+
 ### Reopening while the 90-second light timer is running
 
-The RC4 no longer holds a lock throughout a configured action sequence. A
+The RC5 no longer holds a lock throughout a configured action sequence. A
 successful, authorized recognition starts the sequence asynchronously, and
-a new successful recognition **after the global 2.5-second cooldown** restarts
+a new successful recognition **after the global 1.5-second cooldown** restarts
 the previous Fingerprint Access action sequence, even when switching between
 full and partial access profiles. During enrollment and for 5 seconds after it
 ends, matching remains suspended.
@@ -355,7 +368,7 @@ License: MIT.
    after enrollment before testing a fresh touch.
 7. Register your relative with another ID and Partial access. Verify both
    physical action paths separately under supervision.
-8. Try rapid repeat scans (within 2.5 seconds) to verify the cooldown, and
+8. Try rapid repeat scans (within 1.5 seconds) to verify the cooldown, and
    repeat after several seconds to verify a new request can open.
 9. Restart Home Assistant and confirm the registry and both access profiles
    persist. Recheck behavior after reconnection/power recovery.
