@@ -8,7 +8,7 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.components import frontend
+from homeassistant.components import lovelace
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
@@ -35,10 +35,69 @@ def _runtime(hass: HomeAssistant, call: ServiceCall) -> FingerprintManager:
     return next(iter(managers.values()))
 
 
+# Increment this cache key whenever the dashboard JS changes.
+CARD_RESOURCE_URL = "/fingerprint_access/fingerprint-access-card.js?v=0203"
+CARD_RESOURCE_PATH = CARD_RESOURCE_URL.partition("?")[0]
+
+
+async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
+    """Register a real Lovelace module resource, not an early-loaded extra JS.
+
+    Storage-mode resources are awaited by Lovelace before it renders cards.
+    For YAML mode, the user's YAML is the source of truth: do not mutate it.
+    """
+    ll_data = hass.data.get(lovelace.LOVELACE_DATA)
+    if ll_data is None:
+        _LOGGER.warning(
+            "Lovelace is not loaded. Add the Fingerprint Access resource manually."
+        )
+        return
+
+    if ll_data.resource_mode != lovelace.MODE_STORAGE:
+        _LOGGER.warning(
+            "Lovelace uses YAML resource mode: add %s as type 'module' "
+            "under lovelace.resources in configuration.yaml",
+            CARD_RESOURCE_URL,
+        )
+        return
+
+    resource_store = ll_data.resources
+    # Force the collection's lazy load before inspecting or changing data.
+    # This is important for older HA versions where early writes could
+    # inadvertently overwrite other resources.
+    await resource_store.async_get_info()
+    items = resource_store.async_items()
+    matches = [
+        item
+        for item in items
+        if item.get("url", "").partition("?")[0] == CARD_RESOURCE_PATH
+    ]
+
+    if matches:
+        current = matches[0]
+        if len(matches) > 1:
+            _LOGGER.warning(
+                "Multiple Fingerprint Access Lovelace resources are configured. "
+                "Keep one entry in Settings > Dashboards > Resources."
+            )
+        if current.get("url") != CARD_RESOURCE_URL or current.get("type") != "module":
+            await resource_store.async_update_item(
+                current["id"],
+                {"res_type": "module", "url": CARD_RESOURCE_URL},
+            )
+            _LOGGER.info("Updated Fingerprint Access Lovelace resource")
+        return
+
+    await resource_store.async_create_item(
+        {"res_type": "module", "url": CARD_RESOURCE_URL}
+    )
+    _LOGGER.info("Registered Fingerprint Access Lovelace module resource")
+
+
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Register administrator-only actions once for the integration."""
     hass.data.setdefault(DOMAIN, {})
-    # No Lovelace resource database changes: the user enables the card explicitly.
+    # Serve the JS asset from the integration itself.
     await hass.http.async_register_static_paths(
         [StaticPathConfig(
             "/fingerprint_access/fingerprint-access-card.js",
@@ -46,12 +105,15 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             False,
         )]
     )
-    # Register the card's ES module globally so it appears in the Lovelace
-    # card picker; users no longer have to create a resource manually.
-    # The URL query also invalidates any cached older beta card.
-    frontend.add_extra_js_url(
-        hass, "/fingerprint_access/fingerprint-access-card.js?v=0202"
-    )
+    try:
+        await _async_register_lovelace_resource(hass)
+    except Exception:
+        # Do not prevent the access integration from loading if Lovelace is
+        # unavailable: test mode and the authorization backend stay independent.
+        _LOGGER.exception(
+            "Could not register Fingerprint Access Lovelace resource; "
+            "add it manually in Settings > Dashboards > Resources"
+        )
     slot_schema = vol.All(vol.Coerce(int), vol.Range(min=1, max=199))
     profile_schema = vol.In([PROFILE_FULL, PROFILE_PARTIAL])
     entry_schema = {vol.Optional("entry_id"): cv.string}

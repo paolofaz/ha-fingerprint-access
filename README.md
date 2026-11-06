@@ -192,29 +192,47 @@ or revoke an ID and request deletion from the fingerprint reader. Permissions
 continue to be enforced exclusively by the backend integration; the dashboard
 has **no editable permission helpers**.
 
-1. Install/update the integration, then **restart Home Assistant**.
-2. **Refresh the Home Assistant frontend** (hard reload / close and reopen the app).
-3. Edit a dashboard → **Add card**, and search for **Fingerprint Access**. The
-   integration automatically registers the JavaScript module in the frontend;
-   manually adding a Lovelace resource is no longer necessary.
-4. If you want to add the card manually, use:
+1. Install/update the integration from `main` and verify that
+   `custom_components/fingerprint_access/manifest.json` reports
+   `0.2.0b3`. **GitHub releases are not required for HACS custom integrations.**
+2. Restart Home Assistant and refresh the frontend (hard reload or reopen the app).
+3. In **Settings → Dashboards → ⋮ → Resources**, verify a **JavaScript module**
+   resource was registered at
+   `/fingerprint_access/fingerprint-access-card.js?v=0203`.
+   The integration now registers **actual Lovelace resources** when Home
+   Assistant uses the default resource *storage mode*.
+4. Edit a dashboard → **Add card**, search for **Fingerprint Access**.
+   Alternatively insert this card in the manual editor:
 
 ```yaml
 type: custom:fingerprint-access-card
 entity: sensor.registered_fingerprints
 ```
 
-When using the visual card picker, the card tries to detect the actual
-**Registered fingerprints** sensor automatically. When adding via YAML,
-replace the example entity ID if Home Assistant assigned a different one.
-The integration **registers a card**, not a new sidebar dashboard: you still
-choose where to place it.
+The card picker attempts to locate the sensor automatically. For manual YAML,
+replace the sample entity ID with the real **Registered fingerprints** entity ID.
+This is a **Lovelace card**, not a separate sidebar dashboard.
 
-**Upgrading from 0.2.0b1?** Remove the old manually configured Lovelace
-JavaScript resource if you added one, then refresh the browser. Avoid duplicate
-resource registrations. If the card does not appear, check browser developer
-console for JavaScript load errors and that the URL
-`/fingerprint_access/fingerprint-access-card.js?v=0202` is reachable.
+If you use `lovelace: resource_mode: yaml`, Home Assistant keeps resources in
+configuration YAML; the integration cannot edit them. Add the module yourself:
+
+```yaml
+lovelace:
+  resource_mode: yaml
+  resources:
+    - url: /fingerprint_access/fingerprint-access-card.js?v=0203
+      type: module
+```
+
+Merge with your existing `lovelace:` settings instead of creating a second
+top-level key. Then run `lovelace.reload_resources` (or restart HA) and refresh
+the browser. The integration logs a warning in YAML resource mode.
+
+**Upgrading from older betas:** The integration updates an existing resource
+with the same JavaScript path. If you previously added more than one resource,
+remove the duplicates in Dashboard Resources. If the card still does not appear,
+verify the installed `manifest.json` version, the URL above in your browser,
+and the Home Assistant log and browser console for resource-loading errors.
 
 The card reads the authorization register through the sensor's read-only
 attributes, including its internal `entry_id` for multi-reader operation.
