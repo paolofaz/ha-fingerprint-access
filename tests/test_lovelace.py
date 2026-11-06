@@ -27,7 +27,7 @@ class LovelaceIntegrationTests(unittest.TestCase):
     def test_manifest_dependencies(self):
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
         self.assertTrue({"frontend", "lovelace", "http"}.issubset(manifest["dependencies"]))
-        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+b\d+$")
+        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+(?:b|rc)\d+$")
 
     def test_card_registration(self):
         source = CARD.read_text(encoding="utf-8")

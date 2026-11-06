@@ -42,3 +42,9 @@ def lookup_person(people: dict[str, dict[str, str]], slot: Any) -> dict[str, str
     if not isinstance(person.get("name"), str) or not person["name"].strip():
         return None
     return person
+
+
+def cooldown_active(now: float, last: float, seconds: float) -> bool:
+    """True only during a monotonic post-dispatch cooldown window."""
+    elapsed = now - last
+    return 0 <= elapsed < seconds

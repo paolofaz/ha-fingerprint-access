@@ -38,9 +38,8 @@
       },
       "actions": {
         "title": "Configure access profiles",
-        "description": "Test mode prevents physical actions. Action variables: finger_id, person_name, profile.",
+        "description": "Configure the sequences executed for recognized prints. No actions means no unlocking. Variables: finger_id, person_name, profile.",
         "data": {
-          "test_mode": "Test mode (no actions)",
           "full_actions": "Full access actions",
           "partial_actions": "Partial access actions"
         }

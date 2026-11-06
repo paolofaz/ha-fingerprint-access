@@ -20,7 +20,7 @@ class ScanCounterTests(unittest.TestCase):
         js = (ROOT / "frontend" / "fingerprint-access-card.js").read_text(encoding="utf-8")
         self.assertIn("last.matched_count", js)
         self.assertIn("last.when", js)
-        self.assertIn("Letture riconosciute", js)
+        self.assertIn("Letture dall'avvio", js)
 
 
 if __name__ == "__main__":

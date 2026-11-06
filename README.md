@@ -1,15 +1,13 @@
-# Fingerprint Access for Home Assistant
+# Fingerprint Access for Home Assistant — 1.0.0rc1
 
 A custom Home Assistant integration for **ESPHome fingerprint readers**. It keeps names
 and access profiles in Home Assistant, processes **an event for each scan** and executes
 your own Home Assistant action sequences.
 
 > [!WARNING]
-> **Experimental beta – not yet validated on real door hardware.**
-> Install in **test mode** first. Keep a separate manual means of entry, and test
-> with physical lock/door actuators disconnected or safely disabled. Do not enable
-> actions until you have verified the full-to-partial separation. This is not a
-> certified physical access-control product.
+> **Release candidate — not yet validated on your physical locks.**
+> Keep a manual way to enter. Before authorizing an ID, verify its Full/Partial
+> action sequence and test the actuators safely. This is not certified security hardware.
 
 ## What it does
 
@@ -19,7 +17,12 @@ your own Home Assistant action sequences.
   notification, or combine several steps.
 - Names, IDs and profiles are stored in Home Assistant's `.storage` through its
   `Store` API, not in the ESP8266's flash or editable permission helpers.
-- **Test mode enabled by default**: logs decisions but never executes the actions.
+- No test mode: a registered ID **immediately dispatches** the configured Full/Partial
+  actions on a matching scan. An ID without an entry or without actions never opens.
+- 2.5-second cooldown between dispatched actions; no queued delayed unlocks.
+- 5-second holdoff after registration completion/cancellation to avoid an
+  immediate unintended opening from a finger remaining on the reader.
+- Short in-memory recent event history and a compact, responsive Lovelace card.
 - Enrollment workflow: enter an available ID, person's name and profile; only
   save the authorization **after** ESPHome emits `_enrollment_done` for that ID.
 - Refuse unknown IDs, invalid records, missing action sequences and concurrent
@@ -50,14 +53,17 @@ and ESPHome API action names in the ESPHome firmware consistently.
 In the integration **Configure** menu:
 
 1. **Configure access actions**: choose the sequences for *Full access* and
-   *Partial access*. Leave **Test mode** enabled.
+   *Partial access*. Verify both sequences before registering authorized IDs.
 2. **Register new fingerprint**: type a previously verified empty slot, a name
    and one of the two profiles. Follow the reader's enrollment procedure.
 3. **Manage fingerprints**: choose an existing person to edit name/profile or
    to revoke access and delete the template.
 4. **Cancel enrollment**: stop an in-progress enrollment request.
 
-Only after observing correct test results, turn off **Test mode**.
+**The RC has no Test mode switch.** For initial dry-run tests, temporarily
+configure harmless actions (such as notifications) or leave sequences empty
+while safely verifying ID recognition. When you configure actions that actuate
+locks, a subsequent authorized scan can open them.
 
 ### Example: your existing `script.cancello3q`
 
@@ -85,7 +91,9 @@ Home Assistant sequence of actions. Action templates can use `finger_id`,
 
 Disable the earlier YAML automations triggered by
 `esphome.impronte3q_finger_matched` or changes to fingerprint state.
-Otherwise **both systems might open the locks independently**.
+Otherwise **both systems might open the locks independently**. Keep any
+scripts referenced by the configured actions **enabled** (e.g.
+`script.cancello3q`).
 This integration starts with an **empty authorization register**. Do not assume
 existing templates on the physical reader are imported automatically.
 
@@ -184,7 +192,7 @@ The integration derives ESPHome action service names from the prefix:
 `esphome.impronte3q_cancel_enroll`,
 `esphome.impronte3q_delete`.
 
-## Dedicated dashboard card (beta)
+## Dedicated dashboard card (release candidate)
 
 The integration now includes a custom Lovelace card with a **live people table**,
 and for administrators only, forms to register people, edit their name/profile
@@ -194,11 +202,11 @@ has **no editable permission helpers**.
 
 1. Install/update the integration from `main` and verify that
    `custom_components/fingerprint_access/manifest.json` reports
-   `0.2.0b4`. **GitHub releases are not required for HACS custom integrations.**
+   `1.0.0rc1`. **GitHub releases are not required for HACS custom integrations.**
 2. Restart Home Assistant and refresh the frontend (hard reload or reopen the app).
 3. In **Settings → Dashboards → ⋮ → Resources**, verify a **JavaScript module**
    resource was registered at
-   `/fingerprint_access/fingerprint-access-card.js?v=0204`.
+   `/fingerprint_access/fingerprint-access-card.js?v=100rc1`.
    The integration now registers **actual Lovelace resources** when Home
    Assistant uses the default resource *storage mode*.
 4. Edit a dashboard → **Add card**, search for **Fingerprint Access**.
@@ -220,7 +228,7 @@ configuration YAML; the integration cannot edit them. Add the module yourself:
 lovelace:
   resource_mode: yaml
   resources:
-    - url: /fingerprint_access/fingerprint-access-card.js?v=0204
+    - url: /fingerprint_access/fingerprint-access-card.js?v=100rc1
       type: module
 ```
 
@@ -247,7 +255,7 @@ backend actions require administrative privileges. The integration cannot
 verify whether a biometric reader slot is empty. Confirm that separately
 before enrolling, even if the UI suggests an ID.
 
-### Repeated fingerprints and event counter (0.2.0b4)
+### Repeated fingerprints and event counter
 
 The card shows the timestamp of the last backend outcome with milliseconds and
 a **recognized scan event count since the current integration load**. This count
@@ -325,3 +333,41 @@ integration tests. No release should be used to control a real lock until
 the deployment-specific flow has been tested end to end.
 
 License: MIT.
+
+
+## Release candidate field-test checklist
+
+1. Back up Home Assistant and save the ESPHome YAML. Keep manual entry available.
+2. Disable all old fingerprint-opening automations; **leave the scripts chosen
+   in profile actions enabled**. Disable/disconnect physical actuators during
+   the initial dry run when possible.
+3. Verify Full and Partial sequences individually: Partial must **never** unlock
+   the door or disarm the alarm.
+4. Verify unknown old finger IDs are denied; the registry is empty initially.
+5. Confirm hardware slots 1 and 2 are actually empty. A count of enrolled
+   fingerprints does **not** tell which slots are free.
+6. Register your fingerprint as ID 1 with Full access; wait **at least 5 seconds**
+   after enrollment before testing a fresh touch.
+7. Register your relative with another ID and Partial access. Verify both
+   physical action paths separately under supervision.
+8. Try rapid repeat scans (within 2.5 seconds) to verify the cooldown, and
+   repeat after several seconds to verify a new request can open.
+9. Restart Home Assistant and confirm the registry and both access profiles
+   persist. Recheck behavior after reconnection/power recovery.
+10. Check logs and the recent events list for errors.
+
+An ESPHome matched event is **not cryptographically authenticated to a live
+finger**. Privileged Home Assistant integrations or automations could fire
+synthetic matching events, and fingerprint hardware can misidentify prints or
+emit repeated scans. The integration rejects some directly user-authored
+events and adds safety delays, but these are **not guarantees against spoofing
+or false recognition**. Use suitable dedicated hardware for higher-assurance
+physical access control.
+
+The local integration icon lives at
+`custom_components/fingerprint_access/brand/icon.png` (Home Assistant 2026.3+).
+The full register persists in Home Assistant; the biometric fingerprint
+templates remain in the physical sensor and may require re-enrollment after
+sensor replacement.
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+from time import monotonic
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -20,9 +22,10 @@ from .const import (
     CONF_EVENT_PREFIX,
     CONF_FULL_ACTIONS,
     CONF_PARTIAL_ACTIONS,
-    CONF_TEST_MODE,
     DOMAIN,
     ENROLLMENT_TIMEOUT,
+    MATCH_COOLDOWN_SECONDS,
+    POST_ENROLLMENT_HOLDOFF_SECONDS,
     EVENT_ACCESS,
     PROFILE_FULL,
     STORAGE_VERSION,
@@ -31,7 +34,7 @@ from .const import (
     SUFFIX_MATCH,
     SUFFIX_SCAN,
 )
-from .policy import lookup_person, parse_slot, validate_person
+from .policy import cooldown_active, lookup_person, parse_slot, validate_person
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +59,10 @@ class FingerprintManager:
         self._store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
         self._write_lock = asyncio.Lock()
         self._action_lock = asyncio.Lock()
+        self._enrollment_lock = asyncio.Lock()
+        self._last_dispatched = 0.0
+        self._post_enrollment_holdoff_until = 0.0
+        self._recent_events = deque(maxlen=6)
         self.pending: PendingEnrollment | None = None
         self._cancel_timeout = None
         self.last_scan: dict[str, Any] = {}
@@ -66,11 +73,6 @@ class FingerprintManager:
     def signal(self) -> str:
         """Dispatcher signal for the summary sensor."""
         return f"{DOMAIN}_{self.entry.entry_id}_updated"
-
-    @property
-    def test_mode(self) -> bool:
-        """Test mode is on unless explicitly disabled."""
-        return self.entry.options.get(CONF_TEST_MODE, True)
 
     @property
     def people_list(self) -> list[dict[str, Any]]:
@@ -112,6 +114,15 @@ class FingerprintManager:
             "matched_count": self._matched_count,
             **kwargs,
         }
+        if status in {
+            "denied", "invalid_id", "user_event_ignored", "cooldown_ignored",
+            "post_enrollment_ignored",
+            "busy_ignored", "action_executed", "action_failed",
+            "no_actions_configured", "enrollment_saved", "enrollment_failed",
+            "enrollment_timeout", "enrollment_save_failed",
+            "enrollment_start_failed", "access_revoked",
+        }:
+            self._recent_events.appendleft(dict(self.last_scan))
         self.notify()
         self.hass.bus.async_fire(EVENT_ACCESS, {"reader": self.prefix, **self.last_scan})
 
@@ -138,13 +149,21 @@ class FingerprintManager:
     @callback
     def _on_match(self, event: Event) -> None:
         self._matched_count += 1
+        # Refuse manual user-authored bus events. This does NOT authenticate
+        # the ESPHome origin or stop privileged automations from forging events.
+        if event.context.user_id is not None:
+            self._status("user_event_ignored", parse_slot(event.data.get("finger_id")))
+            return
         self.hass.async_create_task(self.async_handle_match(event))
 
     async def async_handle_match(self, event: Event) -> None:
-        """Authorize only the slot embedded in this single scan event."""
+        """Authorize only the slot in this single scan event."""
         slot = parse_slot(event.data.get("finger_id"))
         if slot is None:
             self._status("invalid_id")
+            return
+        if monotonic() < self._post_enrollment_holdoff_until:
+            self._status("post_enrollment_ignored", slot)
             return
         if self.pending is not None:
             self._status("blocked_during_enrollment", slot)
@@ -153,30 +172,33 @@ class FingerprintManager:
         if person is None:
             self._status("denied", slot)
             return
-
-        profile = person["profile"]
-        actions = self.entry.options.get(
-            CONF_FULL_ACTIONS if profile == PROFILE_FULL else CONF_PARTIAL_ACTIONS, []
-        )
-        if self.test_mode:
-            self._status("test_only", slot, name=person["name"], profile=profile)
-            return
-        if not actions:
-            self._status("no_actions_configured", slot, profile=profile)
-            return
-        # Never queue delayed physical openings behind a previous opening.
+        # Ignore overlapping requests: never queue a delayed door unlock.
         if self._action_lock.locked():
             self._status("busy_ignored", slot)
             return
 
         async with self._action_lock:
-            # A config-entry options flow can update these actions only via a reload.
+            person = lookup_person(self.people, slot)  # Re-check revocation
+            if person is None or self.pending is not None:
+                self._status("denied", slot)
+                return
+            profile = person["profile"]
+            actions = self.entry.options.get(
+                CONF_FULL_ACTIONS if profile == PROFILE_FULL else CONF_PARTIAL_ACTIONS, []
+            )
+            if not isinstance(actions, list) or not actions:
+                self._status("no_actions_configured", slot, profile=profile)
+                return
+
+            now = monotonic()
+            if cooldown_active(now, self._last_dispatched, MATCH_COOLDOWN_SECONDS):
+                self._status("cooldown_ignored", slot, profile=profile)
+                return
+            self._last_dispatched = now
+
             sequence = Script(
-                self.hass,
-                actions,
-                name=f"Fingerprint Access {profile}",
-                domain=DOMAIN,
-                script_mode=SCRIPT_MODE_SINGLE,
+                self.hass, actions, name=f"Fingerprint Access {profile}",
+                domain=DOMAIN, script_mode=SCRIPT_MODE_SINGLE,
             )
             try:
                 await sequence.async_run(
@@ -187,6 +209,7 @@ class FingerprintManager:
                 _LOGGER.exception("Fingerprint access action sequence failed")
                 self._status("action_failed", slot, profile=profile)
                 return
+            # The action was dispatched; hardware opening is not independently confirmed.
             self._status("action_executed", slot, name=person["name"], profile=profile)
 
     @callback
@@ -201,33 +224,46 @@ class FingerprintManager:
 
     async def async_handle_done(self, event: Event) -> None:
         slot = parse_slot(event.data.get("finger_id"))
-        pending = self.pending
-        if pending is None or slot != pending.slot:
-            self._status("unexpected_enrollment_done", slot)
-            return
-        self._clear_pending()
-        try:
-            def add_person(current):
-                if str(slot) in current:
-                    raise ServiceValidationError("Slot already authorized")
-                current[str(slot)] = validate_person(pending.name, pending.profile)
-                return current
+        async with self._enrollment_lock:
+            pending = self.pending
+            if pending is None or slot != pending.slot:
+                self._status("unexpected_enrollment_done", slot)
+                return
 
-            await self.async_mutate(add_person)
-        except Exception:
-            _LOGGER.exception("Could not persist enrollment; no access granted")
-            self._status("enrollment_save_failed", slot)
-            return
-        self._status("enrollment_saved", slot, name=pending.name, profile=pending.profile)
+            # Keep all scans blocked until the authorization is durable.
+            try:
+                def add_person(current):
+                    if str(slot) in current:
+                        raise ServiceValidationError("Slot already authorized")
+                    current[str(slot)] = validate_person(pending.name, pending.profile)
+                    return current
+
+                await self.async_mutate(add_person)
+            except Exception:
+                _LOGGER.exception("Enrollment succeeded but registry could not be saved")
+                self._status("enrollment_save_failed", slot)
+                return
+            finally:
+                if self.pending is pending:
+                    self._clear_pending()
+            self._status("enrollment_saved", slot, name=pending.name, profile=pending.profile)
 
     @callback
     def _on_failed(self, event: Event) -> None:
+        self.hass.async_create_task(self.async_handle_failed(event))
+
+    async def async_handle_failed(self, event: Event) -> None:
         slot = parse_slot(event.data.get("finger_id"))
-        if self.pending is not None and slot == self.pending.slot:
-            self._clear_pending()
-            self._status("enrollment_failed", slot)
+        async with self._enrollment_lock:
+            if self.pending is not None and slot == self.pending.slot:
+                self._clear_pending()
+                self._status("enrollment_failed", slot)
 
     def _clear_pending(self) -> None:
+        if self.pending is not None:
+            self._post_enrollment_holdoff_until = (
+                monotonic() + POST_ENROLLMENT_HOLDOFF_SECONDS
+            )
         self.pending = None
         if self._cancel_timeout is not None:
             self._cancel_timeout()
@@ -252,46 +288,53 @@ class FingerprintManager:
     async def start_enrollment(
         self, slot: int, name: str, profile: str, scans: int, confirmed: bool
     ) -> None:
-        """Start enrollment; permission remains absent until callback + disk write."""
+        """Start enrollment; only a matching completion + disk write grants access."""
         if not confirmed:
             raise ServiceValidationError("Confirm the physical slot is free first")
-        if parse_slot(slot) != slot or not 2 <= scans <= 6:
+        if isinstance(slot, bool) or parse_slot(slot) != slot or not 2 <= scans <= 6:
             raise ServiceValidationError("Invalid slot or scan count")
         try:
             person = validate_person(name, profile)
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
-        if self.pending is not None:
-            raise ServiceValidationError("An enrollment is already in progress")
-        if str(slot) in self.people:
-            raise ServiceValidationError("That slot already belongs to a person")
-        pending = PendingEnrollment(slot, person["name"], person["profile"])
-        self.pending = pending
 
-        @callback
-        def timed_out(_now: Any) -> None:
-            if self.pending is pending:
-                self._clear_pending()
-                self._status("enrollment_timeout", slot)
+        async with self._enrollment_lock:
+            if self.pending is not None:
+                raise ServiceValidationError("An enrollment is already in progress")
+            if str(slot) in self.people:
+                raise ServiceValidationError("That slot already belongs to a person")
+            pending = PendingEnrollment(slot, person["name"], person["profile"])
+            self.pending = pending
 
-        self._cancel_timeout = async_call_later(
-            self.hass, ENROLLMENT_TIMEOUT, timed_out
-        )
-        self._status("enrollment_started", slot, name=pending.name, profile=pending.profile)
-        try:
-            await self._call_esphome("enroll", {"finger_id": slot, "num_scans": scans})
-        except Exception:
-            if self.pending is pending:
-                self._clear_pending()
-            self._status("enrollment_start_failed", slot)
-            raise
+            @callback
+            def timed_out(_now: Any) -> None:
+                if self.pending is pending:
+                    self._clear_pending()
+                    self._status("enrollment_timeout", slot)
+
+            self._cancel_timeout = async_call_later(
+                self.hass, ENROLLMENT_TIMEOUT, timed_out
+            )
+            self._status("enrollment_started", slot, name=pending.name, profile=pending.profile)
+            try:
+                await self._call_esphome("enroll", {"finger_id": slot, "num_scans": scans})
+            except Exception:
+                if self.pending is pending:
+                    self._clear_pending()
+                self._status("enrollment_start_failed", slot)
+                raise
 
     async def cancel_enrollment(self) -> None:
-        """Stop granting on a late completion even if cancel service fails."""
-        slot = self.pending.slot if self.pending else None
-        self._clear_pending()
-        await self._call_esphome("cancel_enroll")
-        self._status("enrollment_cancelled", slot)
+        """Late completion after cancellation can never grant access."""
+        async with self._enrollment_lock:
+            slot = self.pending.slot if self.pending else None
+            self._clear_pending()
+            try:
+                await self._call_esphome("cancel_enroll")
+            except Exception:
+                self._status("enrollment_cancel_failed", slot)
+                raise
+            self._status("enrollment_cancelled", slot)
 
     async def edit_person(self, slot: int, name: str, profile: str) -> None:
         """Update a known person with an explicit admin operation."""

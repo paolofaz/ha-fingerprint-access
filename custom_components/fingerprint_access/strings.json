@@ -38,9 +38,8 @@
       },
       "actions": {
         "title": "Access profiles and actions",
-        "description": "Start in test mode. Each profile accepts any Home Assistant action sequence; no actions are executed while test mode is active. Available variables: finger_id, person_name, profile.",
+        "description": "Configure the sequences executed for recognized prints. No actions means no unlocking. Variables: finger_id, person_name, profile.",
         "data": {
-          "test_mode": "Test mode (do not execute actions)",
           "full_actions": "Full access - action sequence",
           "partial_actions": "Partial access - action sequence"
         }

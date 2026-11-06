@@ -38,9 +38,8 @@
       },
       "actions": {
         "title": "Profili e azioni",
-        "description": "La modalità test non esegue alcuna azione fisica. Variabili: finger_id, person_name, profile.",
+        "description": "Configura le sequenze eseguite dopo il riconoscimento. Se un profilo non ha azioni, non viene aperto nulla. Variabili: finger_id, person_name, profile.",
         "data": {
-          "test_mode": "Modalità test (nessuna azione)",
           "full_actions": "Azioni accesso completo",
           "partial_actions": "Azioni accesso parziale"
         }

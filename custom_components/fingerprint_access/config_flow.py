@@ -17,7 +17,6 @@ from .const import (
     CONF_EVENT_PREFIX,
     CONF_FULL_ACTIONS,
     CONF_PARTIAL_ACTIONS,
-    CONF_TEST_MODE,
     DEFAULT_EVENT_PREFIX,
     DOMAIN,
     PROFILE_FULL,
@@ -137,7 +136,8 @@ class FingerprintAccessOptionsFlow(config_entries.OptionsFlowWithReload):
         if user_input is not None:
             return self.async_create_entry(
                 data={
-                    **self.config_entry.options,
+                    **{key: value for key, value in self.config_entry.options.items()
+                       if key != "test_mode"},
                     **user_input,
                     CONF_FULL_ACTIONS: user_input.get(CONF_FULL_ACTIONS, []),
                     CONF_PARTIAL_ACTIONS: user_input.get(CONF_PARTIAL_ACTIONS, []),
@@ -148,9 +148,6 @@ class FingerprintAccessOptionsFlow(config_entries.OptionsFlowWithReload):
             step_id="actions",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_TEST_MODE, default=current.get(CONF_TEST_MODE, True)
-                    ): bool,
                     vol.Optional(
                         CONF_FULL_ACTIONS,
                         default=current.get(CONF_FULL_ACTIONS, []),

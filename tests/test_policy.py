@@ -28,6 +28,11 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(policy.lookup_person(data, 1), {"name": "Alice", "profile": "full"})
         self.assertIsNone(policy.lookup_person(data, 2))
 
+    def test_cooldown_and_repeat_scans(self):
+        self.assertTrue(policy.cooldown_active(101.0, 100.0, 2.5))
+        self.assertFalse(policy.cooldown_active(103.0, 100.0, 2.5))
+        self.assertFalse(policy.cooldown_active(100.0, 101.0, 2.5))
+
     def test_invalid_person(self):
         for name, profile in (("", "full"), ("Alice", "invalid"), (None, "partial")):
             with self.assertRaises(ValueError):

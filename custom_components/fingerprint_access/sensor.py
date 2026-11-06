@@ -41,7 +41,9 @@ class FingerprintRegistrySensor(SensorEntity):
             "reader": self.manager.prefix,
             "entry_id": self.manager.entry.entry_id,
             "people": self.manager.people_list,
-            "test_mode": self.manager.test_mode,
+            "full_actions_configured": bool(self.manager.entry.options.get("full_actions")),
+            "partial_actions_configured": bool(self.manager.entry.options.get("partial_actions")),
+            "recent_events": list(self.manager._recent_events),
             "pending_enrollment": (
                 self.manager.pending.slot if self.manager.pending else None
             ),

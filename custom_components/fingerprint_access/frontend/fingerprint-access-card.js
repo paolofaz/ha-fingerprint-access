@@ -1,223 +1,345 @@
-/* Fingerprint Access dashboard card — permissions are enforced server-side. */
+/* Fingerprint Access – responsive Lovelace card, Release Candidate.
+   The backend, not the card, enforces all access permissions. */
 class FingerprintAccessCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({mode: "open"});
-    this._editing = null;
+    this._hass = null;
+    this._config = null;
     this._busy = false;
-    this._noticeText = "";
+    this._error = false;
+    this._message = "";
+    this._editing = null;
+    this._edit = null;
+    this._draft = {slot: "", name: "", profile: "partial", scans: "2"};
   }
+
+  static getStubConfig(hass) {
+    const match = Object.entries(hass?.states || {}).find(([id, state]) =>
+      id.startsWith("sensor.") &&
+      typeof state.attributes?.reader === "string" &&
+      typeof state.attributes?.entry_id === "string" &&
+      Array.isArray(state.attributes?.people));
+    return {entity: match?.[0] || "sensor.registered_fingerprints"};
+  }
+  getCardSize() { return 7; }
+
   setConfig(config) {
-    if (typeof config?.entity !== "string" || !config.entity.startsWith("sensor.")) {
-      throw new Error("Select the Fingerprint Access 'Registered fingerprints' sensor");
+    if (!config || typeof config.entity !== "string" ||
+        !config.entity.startsWith("sensor.")) {
+      throw new Error("Select the Fingerprint Access registered fingerprints sensor");
     }
     this._config = config;
     this._render();
   }
-  static getStubConfig(hass) {
-    // The assigned HA entity ID depends on the language, installation and
-    // collision handling. Discover the correct registry sensor automatically.
-    const matched = Object.entries(hass?.states || {}).find(([entityId, state]) =>
-      entityId.startsWith("sensor.") &&
-      typeof state.attributes?.entry_id === "string" &&
-      typeof state.attributes?.reader === "string" &&
-      Array.isArray(state.attributes?.people)
-    );
-    return {entity: matched?.[0] || "sensor.registered_fingerprints"};
+
+  set hass(hass) {
+    const priorState = this._hass?.states[this._config?.entity];
+    const priorAdmin = !!this._hass?.user?.is_admin;
+    this._hass = hass;
+    if (priorState !== hass.states[this._config?.entity] ||
+        priorAdmin !== !!hass.user?.is_admin) this._render();
   }
-  getCardSize() { return 7; }
-  set hass(value) {
-    const before = this._hass?.states[this._config?.entity];
-    const oldAdmin = this._hass?.user?.is_admin;
-    this._hass = value;
-    if (before !== value.states[this._config?.entity] || oldAdmin !== value.user?.is_admin) this._render();
+
+  _el(tag, txt = null, cls = "") {
+    const node = document.createElement(tag);
+    if (txt !== null) node.textContent = String(txt);
+    if (cls) node.className = cls;
+    return node;
   }
-  _el(tag, text, cls) {
-    const el = document.createElement(tag);
-    if (text !== undefined && text !== null) el.textContent = String(text);
-    if (cls) el.className = cls;
-    return el;
-  }
-  _button(text, callback, kind = "") {
-    const b = this._el("button", text, kind);
+
+  _button(label, callback, className = "") {
+    const b = this._el("button", label, className);
     b.type = "button";
     b.disabled = this._busy;
-    b.onclick = callback;
+    b.addEventListener("click", callback);
     return b;
   }
-  _select(profile) {
+
+  _field(label, type, value, onInput) {
+    const wrap = this._el("label", null, "field");
+    wrap.append(this._el("span", label));
+    const input = this._el("input");
+    input.type = type;
+    input.value = String(value ?? "");
+    input.oninput = () => onInput(input.value);
+    wrap.append(input);
+    return {wrap, input};
+  }
+
+  _select(current, callback) {
     const sel = this._el("select");
-    for (const [value, label] of [["partial", "Accesso parziale"], ["full", "Accesso completo"]]) {
-      const opt = this._el("option", label);
-      opt.value = value;
-      sel.append(opt);
+    for (const [value, label] of [
+      ["partial", "Accesso parziale"],
+      ["full", "Accesso completo"]
+    ]) {
+      const option = this._el("option", label);
+      option.value = value;
+      sel.append(option);
     }
-    sel.value = profile;
+    sel.value = current;
+    sel.onchange = () => callback(sel.value);
     return sel;
   }
-  async _action(name, data, successMessage) {
+
+  _date(value) {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleTimeString("it-IT", {
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  }
+
+  _status(code) {
+    return {
+      denied: "Impronta non autorizzata",
+      invalid_id: "ID non valido",
+      user_event_ignored: "Evento manuale ignorato",
+      blocked_during_enrollment: "Lettura sospesa durante registrazione",
+      busy_ignored: "Lettura ravvicinata ignorata",
+      cooldown_ignored: "Pausa di sicurezza tra aperture",
+      post_enrollment_ignored: "Attendi dopo la registrazione",
+      no_actions_configured: "Nessuna azione configurata",
+      action_executed: "Azioni inviate a Home Assistant",
+      action_failed: "Errore durante le azioni",
+      enrollment_started: "Registrazione avviata",
+      enrolling_scan: "Scansione di registrazione",
+      enrollment_saved: "Impronta registrata e autorizzata",
+      enrollment_failed: "Registrazione fallita",
+      enrollment_timeout: "Tempo di registrazione scaduto",
+      enrollment_start_failed: "Impossibile avviare la registrazione",
+      enrollment_save_failed: "Errore nel salvataggio (accesso negato)",
+      enrollment_cancelled: "Registrazione annullata",
+      enrollment_cancel_failed: "Impossibile annullare sul lettore",
+      person_updated: "Persona aggiornata",
+      access_revoked: "Accesso revocato",
+      template_delete_requested: "Cancellazione richiesta al lettore",
+      unexpected_enrollment_done: "Esito di registrazione inatteso"
+    }[code] || (code || "—");
+  }
+
+  async _call(service, data, successText) {
     if (this._busy || !this._hass?.user?.is_admin) return;
     this._busy = true;
+    this._render();
     try {
-      await this._hass.callService("fingerprint_access", name, data);
-      this._noticeText = successMessage;
+      await this._hass.callService("fingerprint_access", service, data);
+      this._message = successText;
+      this._error = false;
       this._editing = null;
+      this._edit = null;
+      if (service === "enroll") {
+        this._draft.name = "";
+      }
     } catch (error) {
-      this._noticeText = "Errore: " + (error?.message || String(error));
+      this._message = error?.message || String(error);
+      this._error = true;
     } finally {
       this._busy = false;
       this._render();
     }
   }
+
   _render() {
-    if (!this._hass || !this._config) return;
+    if (!this._config || !this._hass) return;
     const root = this.shadowRoot;
     root.replaceChildren();
     const style = this._el("style");
     style.textContent = [
-      ":host{display:block}ha-card{display:block;padding:20px;color:var(--primary-text-color)}",
-      "h2{margin:0 0 10px;font-size:20px}h3{margin:24px 0 10px;font-size:16px}",
-      ".meta{color:var(--secondary-text-color);font-size:13px}.warn{color:var(--error-color,#b71c1c)}",
-      ".line{margin:8px 0}.note{padding:10px;background:var(--secondary-background-color,#eee);border-radius:8px}",
-      "table{border-collapse:collapse;width:100%}td,th{padding:9px 6px;text-align:left;border-bottom:1px solid var(--divider-color,#ddd)}",
-      ".scroll{overflow:auto}button,input,select{font:inherit;border-radius:7px;padding:8px;border:1px solid var(--divider-color,#aaa)}",
-      "button{cursor:pointer;background:var(--secondary-background-color,#eee);color:var(--primary-text-color);margin:2px}",
-      "button:disabled{opacity:.55}input,select{color:var(--primary-text-color);background:var(--card-background-color,white);max-width:100%;box-sizing:border-box}",
-      ".buttons{display:flex;flex-wrap:wrap;align-items:center}.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px}",
-      "label{display:flex;flex-direction:column;gap:6px;font-size:13px}.danger{color:var(--error-color,#b71c1c)}"
+      ":host{display:block}*{box-sizing:border-box}ha-card{display:block;color:var(--primary-text-color);padding:20px}",
+      "h2{font-size:20px;line-height:1.3;margin:0}h3{font-size:16px;margin:0}",
+      ".header,.meta-line,.person,.buttons,.statusrow,.footer{display:flex;align-items:center;gap:10px}",
+      ".header{justify-content:space-between;flex-wrap:wrap}.muted{color:var(--secondary-text-color);font-size:13px}",
+      ".pill{border:1px solid var(--divider-color,#ddd);border-radius:20px;padding:5px 10px;font-size:12px}",
+      ".pill.full{color:var(--primary-color,#1976d2)}.pill.partial{color:var(--secondary-text-color)}",
+      ".count{font-variant-numeric:tabular-nums;font-weight:600}.section{margin-top:20px;border-top:1px solid var(--divider-color,#ddd);padding-top:18px}",
+      ".status{border-radius:12px;background:var(--secondary-background-color,#f4f6f8);padding:13px;margin-top:16px}",
+      ".statusrow{justify-content:space-between;align-items:center}.status-title{font-weight:600}.status-time{white-space:nowrap;font-size:12px;color:var(--secondary-text-color)}",
+      ".status-detail{color:var(--secondary-text-color);margin-top:4px;font-size:13px}",
+      ".list{display:grid;gap:8px;margin-top:12px}.person{justify-content:space-between;border:1px solid var(--divider-color,#ddd);border-radius:12px;padding:12px;flex-wrap:wrap}",
+      ".identity{min-width:0;flex:1}.name{font-weight:600;overflow-wrap:anywhere}.subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:3px}",
+      ".slot{border-radius:8px;background:var(--secondary-background-color,#f4f6f8);padding:8px 12px;font-weight:700;font-variant-numeric:tabular-nums}",
+      ".buttons{flex-wrap:wrap}.note{border-radius:9px;padding:10px;background:var(--secondary-background-color,#f4f6f8);font-size:13px;margin-top:12px}",
+      ".error{color:var(--error-color,#d32f2f)}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}",
+      ".field{display:flex;flex-direction:column;gap:5px;font-size:13px;min-width:0}",
+      "input,select,button{font:inherit;border:1px solid var(--divider-color,#aaa);border-radius:9px;padding:10px;max-width:100%}",
+      "input,select{width:100%;min-width:0;background:var(--card-background-color,white);color:var(--primary-text-color)}",
+      "button{background:var(--secondary-background-color,#eee);color:var(--primary-text-color);cursor:pointer}",
+      "button.primary{background:var(--primary-color,#1976d2);border-color:var(--primary-color,#1976d2);color:#fff}",
+      "button.danger{color:var(--error-color,#d32f2f)}button:disabled{opacity:.5;cursor:not-allowed}",
+      ".footer{justify-content:space-between;flex-wrap:wrap;margin-top:15px}",
+      "details{margin-top:16px}summary{cursor:pointer;font-weight:600}details .note{margin-top:8px}",
+      "@media(max-width:550px){ha-card{padding:16px}.fields{grid-template-columns:1fr}.person{align-items:flex-start}.buttons{width:100%;justify-content:flex-end}.statusrow{align-items:flex-start}}"
     ].join("");
     root.append(style);
+
     const card = this._el("ha-card");
     root.append(card);
-    card.append(this._el("h2", "Fingerprint Access"));
+    const header = this._el("div", null, "header");
+    header.append(this._el("h2", "Fingerprint Access"));
     const state = this._hass.states[this._config.entity];
     if (!state) {
-      card.append(this._el("p", "Sensore non trovato: verifica l'ID entity nella configurazione della scheda.", "warn"));
+      card.append(header, this._el("p", "Sensore non trovato: verifica l'entità della rubrica.", "error"));
       return;
     }
-    const attrs = state.attributes || {};
-    const entry_id = attrs.entry_id;
-    const people = Array.isArray(attrs.people) ? attrs.people : [];
+    const a = state.attributes || {};
     const admin = !!this._hass.user?.is_admin;
-    card.append(this._el("p", "Lettore: " + (attrs.reader || "—") + " · " + people.length + " identità", "meta"));
-    card.append(this._el("p", attrs.test_mode ? "MODALITÀ TEST: le azioni NON vengono eseguite." : "ATTENZIONE: le azioni sono attive.", attrs.test_mode ? "note" : "warn"));
-    if (this._noticeText) card.append(this._el("p", this._noticeText, "note"));
-    if (attrs.last_scan?.status) {
-      const last = attrs.last_scan;
-      const when = last.when ? new Date(last.when) : null;
-      const clock = when && !Number.isNaN(when.getTime())
-        ? when.toLocaleTimeString("it-IT", {hour12:false, hour:"2-digit", minute:"2-digit", second:"2-digit"})
-        : "—";
-      const millis = when && !Number.isNaN(when.getTime())
-        ? "." + String(when.getMilliseconds()).padStart(3, "0")
-        : "";
-      const counter = Number.isInteger(last.matched_count)
-        ? " · Letture riconosciute: " + last.matched_count + " (dall'avvio)"
-        : "";
-      card.append(this._el("p",
-        "Ultimo evento: " + last.status +
-        (last.slot == null ? "" : " · ID " + last.slot) +
-        " · " + clock + millis + counter, "meta"));
+    const people = Array.isArray(a.people) ? a.people : [];
+    header.append(this._el("span", people.length + " impronte", "pill count"));
+    card.append(header);
+    card.append(this._el("div", "Lettore: " + (a.reader || "—"), "muted"));
+
+    if (this._message) card.append(this._el("div", this._message, "note" + (this._error ? " error" : "")));
+    if (!a.full_actions_configured || !a.partial_actions_configured) {
+      card.append(this._el("div", "Verifica le azioni dei due profili nelle impostazioni dell'integrazione: almeno una sequenza non è configurata.", "note"));
     }
-    if (attrs.pending_enrollment != null) {
-      const row = this._el("div", null, "buttons");
-      row.append(this._el("span", "Registrazione in corso: ID " + attrs.pending_enrollment));
-      if (admin) row.append(this._button("Annulla registrazione", () => {
-        if (window.confirm("Annullare la registrazione corrente?")) {
-          void this._action("cancel_enrollment", {entry_id}, "Richiesta di annullamento inviata.");
+
+    const last = a.last_scan || {};
+    if (last.status) {
+      const wrap = this._el("div", null, "status");
+      const line = this._el("div", null, "statusrow");
+      line.append(this._el("span", this._status(last.status), "status-title"));
+      line.append(this._el("span", this._date(last.when), "status-time"));
+      wrap.append(line);
+      const fragments = [];
+      if (last.slot != null) fragments.push("ID " + last.slot);
+      if (last.name) fragments.push(last.name);
+      if (last.profile) fragments.push(last.profile === "full" ? "Accesso completo" : "Accesso parziale");
+      if (last.matched_count != null) fragments.push("Letture dall'avvio: " + last.matched_count);
+      if (fragments.length) wrap.append(this._el("div", fragments.join(" · "), "status-detail"));
+      card.append(wrap);
+    }
+
+    if (a.pending_enrollment !== null && a.pending_enrollment !== undefined) {
+      const pending = this._el("div", "Registrazione in corso: ID " + a.pending_enrollment, "note");
+      if (admin) pending.append(this._button("Annulla", () => {
+        if (window.confirm("Vuoi annullare la registrazione?")) {
+          void this._call("cancel_enrollment", {entry_id:a.entry_id}, "Annullamento richiesto.");
         }
       }));
-      card.append(row);
+      card.append(pending);
     }
-    card.append(this._el("h3", "Rubrica"));
-    const scroll = this._el("div", null, "scroll");
-    const table = this._el("table");
-    const header = this._el("tr");
-    for (const name of ["ID", "Nome", "Profilo", ...(admin ? ["Amministrazione"] : [])]) {
-      header.append(this._el("th", name));
-    }
-    table.append(header);
-    for (const p of [...people].sort((a,b) => Number(a.finger_id)-Number(b.finger_id))) {
+
+    const sec = this._el("section", null, "section");
+    sec.append(this._el("h3", "Rubrica"));
+    card.append(sec);
+    const list = this._el("div", null, "list");
+    sec.append(list);
+    if (!people.length) list.append(this._el("div", "Nessuna impronta autorizzata.", "muted"));
+
+    const sorted = [...people].sort((x,y) => Number(x.finger_id)-Number(y.finger_id));
+    for (const p of sorted) {
       const id = Number(p.finger_id);
-      const row = this._el("tr");
-      row.append(this._el("td", id));
+      const person = this._el("article", null, "person");
+      person.append(this._el("div", id, "slot"));
+
       if (admin && this._editing === id) {
-        const nameCell = this._el("td"), profileCell = this._el("td"), actionsCell = this._el("td");
-        const nameInput = this._el("input");
-        nameInput.value = p.name || "";
-        nameInput.maxLength = 80;
-        const profileInput = this._select(p.profile);
-        nameCell.append(nameInput);
-        profileCell.append(profileInput);
-        actionsCell.append(this._button("Salva", () => {
-          const name = nameInput.value.trim(), profile = profileInput.value;
-          if (!name || name.length > 80) return window.alert("Nome non valido.");
-          if (!window.confirm("Confermi l'ID " + id + " (" + name + ") con profilo " + (profile === "full" ? "COMPLETO" : "PARZIALE") + "?")) return;
-          void this._action("update_person", {entry_id, finger_id: id, name, profile}, "ID " + id + " aggiornato.");
-        }));
-        actionsCell.append(this._button("Annulla", () => {this._editing=null;this._render();}));
-        row.append(nameCell, profileCell, actionsCell);
+        const editor = this._el("div", null, "identity");
+        const n = this._field("Nome", "text", this._edit?.name ?? p.name, value => {this._edit.name=value;});
+        n.input.maxLength = 80;
+        const choice = this._select(this._edit?.profile || p.profile, value => {this._edit.profile=value;});
+        const cp = this._el("label", null, "field");
+        cp.append(this._el("span","Profilo"),choice);
+        editor.append(n.wrap,cp);
+        person.append(editor);
+        const buttons = this._el("div", null, "buttons");
+        buttons.append(this._button("Salva", () => {
+          const name=(this._edit?.name||"").trim(), profile=this._edit?.profile;
+          if (!name || name.length>80) return window.alert("Inserisci un nome valido.");
+          const change = profile !== p.profile ? "\nATTENZIONE: cambia i permessi di accesso." : "";
+          if (window.confirm("Salvare ID " + id + " — " + name + " — " + (profile==="full"?"COMPLETO":"PARZIALE") + "?"+change)) {
+            void this._call("update_person", {entry_id:a.entry_id,finger_id:id,name,profile}, "Identità aggiornata.");
+          }
+        },"primary"));
+        buttons.append(this._button("Annulla",() => {this._editing=null;this._edit=null;this._render();}));
+        person.append(buttons);
       } else {
-        row.append(this._el("td", p.name || "—"));
-        row.append(this._el("td", p.profile === "full" ? "Accesso completo" : p.profile === "partial" ? "Accesso parziale" : "Non valido"));
+        const name = this._el("div", null, "identity");
+        name.append(this._el("div", p.name || "—", "name"));
+        name.append(this._el("div", p.profile === "full" ? "Accesso completo" : "Accesso parziale", "subtitle"));
+        person.append(name);
         if (admin) {
-          const cell = this._el("td", null, "buttons");
-          cell.append(this._button("Modifica", () => {this._editing=id;this._render();}));
-          cell.append(this._button("Elimina", () => {
-            const typed = window.prompt("Revoca e cancellazione irreversibile dell'ID " + id + ".\nDigita l'ID per confermare:");
-            if (typed !== String(id)) return;
-            void this._action("delete_person", {entry_id, finger_id:id}, "ID " + id + " revocato; cancellazione dal lettore richiesta.");
-          }, "danger"));
-          row.append(cell);
+          const actions = this._el("div", null, "buttons");
+          actions.append(this._button("Modifica", () => {
+            this._editing=id;this._edit={name:p.name||"",profile:p.profile};this._render();
+          }));
+          actions.append(this._button("Elimina", () => {
+            const typed=window.prompt("Revoca ID "+id+" ed elimina il modello biometrico.\nScrivi l'ID esatto per confermare:");
+            if(typed!==String(id))return;
+            if(!window.confirm("Confermi la revoca di "+(p.name||"ID "+id)+"? Non è reversibile."))return;
+            void this._call("delete_person",{entry_id:a.entry_id,finger_id:id},"Revoca salvata; cancellazione richiesta al lettore.");
+          },"danger"));
+          person.append(actions);
         }
       }
-      table.append(row);
+      list.append(person);
     }
-    if (!people.length) {
-      const tr = this._el("tr"), td = this._el("td", "Nessuna persona autorizzata.");
-      td.colSpan = admin ? 4 : 3;
-      tr.append(td);
-      table.append(tr);
+
+    if (admin) {
+      const formSection=this._el("section",null,"section");
+      card.append(formSection);
+      formSection.append(this._el("h3","Registra nuova impronta"));
+      formSection.append(this._el("p","Scegli ID, nome e accesso. L'autorizzazione viene salvata solo dopo la registrazione riuscita.","muted"));
+      const form=this._el("form");
+      const fields=this._el("div",null,"fields");
+      const used=new Set(people.map(p=>Number(p.finger_id)));
+      let suggested=1;while(used.has(suggested)&&suggested<199)suggested++;
+      if(!this._draft.slot || used.has(Number(this._draft.slot))) {
+        this._draft.slot=String(suggested);
+      }
+      const slot=this._field("ID slot (da verificare sul lettore)","number",this._draft.slot,value=>{this._draft.slot=value;});
+      slot.input.min="1";slot.input.max="199";slot.input.step="1";slot.input.required=true;
+      const name=this._field("Nome","text",this._draft.name,value=>{this._draft.name=value;});
+      name.input.required=true;name.input.maxLength=80;
+      const selectLabel=this._el("label",null,"field");
+      selectLabel.append(this._el("span","Profilo"));
+      const profile=this._select(this._draft.profile,value=>{this._draft.profile=value;});
+      selectLabel.append(profile);
+      const scans=this._field("Numero scansioni","number",this._draft.scans,value=>{this._draft.scans=value;});
+      scans.input.min="2";scans.input.max="6";scans.input.step="1";scans.input.required=true;
+      fields.append(slot.wrap,name.wrap,selectLabel,scans.wrap);
+      form.append(fields);
+      const footer=this._el("div",null,"footer");
+      const submit=this._el("button","Avvia registrazione","primary");
+      submit.type="submit";submit.disabled=this._busy||a.pending_enrollment!=null;
+      footer.append(submit);
+      form.append(footer);
+      form.onsubmit=event=>{
+        event.preventDefault();
+        const finger_id=Number(this._draft.slot);
+        const num_scans=Number(this._draft.scans);
+        const personName=this._draft.name.trim();
+        const selected=this._draft.profile;
+        if(!Number.isInteger(finger_id)||finger_id<1||finger_id>199||used.has(finger_id))return window.alert("ID non valido o già in rubrica.");
+        if(!Number.isInteger(num_scans)||num_scans<2||num_scans>6||!personName||personName.length>80)return window.alert("Controlla il nome e il numero di scansioni.");
+        if(!window.confirm("Hai verificato che lo slot "+finger_id+" sia LIBERO sul lettore?\n\nPersona: "+personName+"\nAutorizzazione: "+(selected==="full"?"COMPLETA":"PARZIALE")+"\n\nProcedere?"))return;
+        void this._call("enroll",{entry_id:a.entry_id,finger_id,name:personName,profile:selected,num_scans,confirm_free_slot:true},"Registrazione avviata. Segui il LED del lettore.");
+      };
+      formSection.append(form);
     }
-    scroll.append(table);
-    card.append(scroll);
-    if (!admin) {
-      card.append(this._el("p", "Per modifiche e registrazioni è necessario un account amministratore.", "meta"));
-      return;
+
+    const recent=Array.isArray(a.recent_events)?a.recent_events:[];
+    if(recent.length) {
+      const section=this._el("details");
+      const summary=this._el("summary","Ultimi eventi ("+recent.length+")");
+      section.append(summary);
+      for(const e of recent) {
+        section.append(this._el("div",this._date(e.when)+" · "+(e.slot==null?"—":"ID "+e.slot)+" · "+this._status(e.status),"line muted"));
+      }
+      card.append(section);
     }
-    card.append(this._el("h3", "Registra impronta"));
-    card.append(this._el("p", "Verifica che lo slot sia fisicamente vuoto. Il permesso viene salvato soltanto dopo l'evento di registrazione completata.", "meta"));
-    const form = this._el("form"), fields = this._el("div", null, "fields");
-    const maxUsed = people.reduce((m,p) => Math.max(m,Number(p.finger_id)||0),0);
-    const slotLabel = this._el("label", "ID slot (suggerito, non verificato)");
-    const slot = this._el("input"); slot.type="number";slot.min="1";slot.max="199";slot.step="1";slot.value=String(Math.min(199,maxUsed+1));slot.required=true;
-    slotLabel.append(slot);
-    const nameLabel = this._el("label", "Nome");
-    const name = this._el("input");name.maxLength=80;name.required=true;nameLabel.append(name);
-    const profileLabel = this._el("label", "Profilo");
-    const profile = this._select("partial");profileLabel.append(profile);
-    const scansLabel = this._el("label", "Scansioni");
-    const scans = this._el("input");scans.type="number";scans.min="2";scans.max="6";scans.step="1";scans.value="2";scansLabel.append(scans);
-    fields.append(slotLabel,nameLabel,profileLabel,scansLabel);
-    form.append(fields);
-    const submit = this._el("button","Avvia registrazione");
-    submit.type="submit";
-    submit.disabled = this._busy || attrs.pending_enrollment != null;
-    form.append(submit);
-    form.onsubmit = ev => {
-      ev.preventDefault();
-      const finger_id=Number(slot.value), num_scans=Number(scans.value), person=name.value.trim(), selected=profile.value;
-      if(!Number.isInteger(finger_id)||finger_id<1||finger_id>199||people.some(p=>Number(p.finger_id)===finger_id)) return window.alert("ID non valido o già registrato in rubrica.");
-      if(!person||person.length>80||!Number.isInteger(num_scans)||num_scans<2||num_scans>6) return window.alert("Controlla nome e scansioni.");
-      if(!window.confirm("Hai verificato FISICAMENTE che l'ID " + finger_id + " sia libero?\nRegistra " + person + " con profilo " + (selected==="full"?"COMPLETO":"PARZIALE") + "?")) return;
-      void this._action("enroll",{entry_id,finger_id,name:person,profile:selected,num_scans,confirm_free_slot:true},"Registrazione ID " + finger_id + " avviata: attendi il completamento sul lettore.");
-    };
-    card.append(form);
   }
 }
-if (!customElements.get("fingerprint-access-card")) customElements.define("fingerprint-access-card", FingerprintAccessCard);
-window.customCards = window.customCards || [];
-if (!window.customCards.some(card=>card.type==="fingerprint-access-card")) window.customCards.push({
-  type:"fingerprint-access-card",name:"Fingerprint Access",description:"Rubrica e registrazione impronte ESPHome",preview:false,
-  documentationURL:"https://github.com/paolofaz/ha-fingerprint-access"
-});
+if (!customElements.get("fingerprint-access-card")) {
+  customElements.define("fingerprint-access-card",FingerprintAccessCard);
+}
+window.customCards=window.customCards||[];
+if (!window.customCards.some(c=>c.type==="fingerprint-access-card")) {
+  window.customCards.push({
+    type:"fingerprint-access-card",
+    name:"Fingerprint Access",
+    description:"Rubrica e gestione impronte ESPHome",
+    preview:false,
+    documentationURL:"https://github.com/paolofaz/ha-fingerprint-access"
+  });
+}
