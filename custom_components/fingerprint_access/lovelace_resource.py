@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 _LOGGER = logging.getLogger(__name__)
 
 CARD_RESOURCE_PATH = "/fingerprint_access/fingerprint-access-card.js"
-CARD_RESOURCE_URL = CARD_RESOURCE_PATH + "?v=100rc4"
+CARD_RESOURCE_URL = CARD_RESOURCE_PATH + "?v=100rc5"
 
 
 def _is_own_resource(item: dict) -> bool:

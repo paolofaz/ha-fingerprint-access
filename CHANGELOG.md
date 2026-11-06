@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.0rc5 — 2026-11-06
+
+- Fix a real Home Assistant action failure from RC4: template conditions in
+  the shared restart-mode action script must use a Home Assistant `Template`
+  object, not a bare string. RC4 raised
+  `AttributeError: 'str' object has no attribute 'async_render_to_info'`
+  before it could call the gate script.
+- Reduce the global per-reader matching cooldown from 2.5 seconds to
+  **1.5 seconds**, as requested.
+- Add regression tests for template condition compatibility and the new
+  cooldown boundary.
+- Preserve authorization checks, the 5-second post-enrollment holdoff, and
+  the restart-mode action runner. No change to ESPHome, the user's gate script,
+  stored fingerprints, or unrelated Lovelace resources.
+- Update manifest, card cache version and documentation for RC5.
+- A real-reader test is still required before promoting this release to stable.
+
+
 ## 1.0.0rc4 — 2026-11-06
 
 - Remove the action-duration lock that blocked new scans during 90-second
