@@ -35,7 +35,7 @@ def _runtime(hass: HomeAssistant, call: ServiceCall) -> FingerprintManager:
     return next(iter(managers.values()))
 
 
-# Increment this cache key whenever the dashbofig: dict[str, Any]) -> bool:
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Register administrator-only actions once for the integration."""
     hass.data.setdefault(DOMAIN, {})
     # Serve the JS asset from the integration itself.
@@ -46,8 +46,7 @@ def _runtime(hass: HomeAssistant, call: ServiceCall) -> FingerprintManager:
             False,
         )]
     )
-    # Do not create, update, or delete user-managed Lovelace resources here.
-    # The user configures this JavaScript module in Dashboard Resources.
+    # Resource registry is user-managed; never modify Lovelace resources here.
     slot_schema = vol.All(vol.Coerce(int), vol.Range(min=1, max=199))
     profile_schema = vol.In([PROFILE_FULL, PROFILE_PARTIAL])
     entry_schema = {vol.Optional("entry_id"): cv.string}
