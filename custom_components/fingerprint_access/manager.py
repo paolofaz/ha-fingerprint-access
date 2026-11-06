@@ -61,6 +61,7 @@ class FingerprintManager:
         self._write_lock = asyncio.Lock()
         self._action_script: Script | None = None
         self._dispatch_serial = 0
+        self._stopping = False
         self._enrollment_lock = asyncio.Lock()
         self._last_dispatched = 0.0
         self._post_enrollment_holdoff_until = 0.0
@@ -150,6 +151,8 @@ class FingerprintManager:
 
     @callback
     def _on_match(self, event: Event) -> None:
+        if self._stopping:
+            return
         self._matched_count += 1
         # Refuse manual user-authored bus events. This does NOT authenticate
         # the ESPHome origin or stop privileged automations from forging events.
@@ -184,6 +187,9 @@ class FingerprintManager:
         profile: str, context: Any,
     ) -> None:
         """Run asynchronously; a 90-second delay never holds up new fingerprints."""
+        # An event task queued before unload must never start a new script.
+        if self._stopping or serial != self._dispatch_serial:
+            return
         try:
             await self._get_action_script().async_run(
                 {"finger_id": slot, "person_name": person["name"], "profile": profile},
@@ -203,6 +209,8 @@ class FingerprintManager:
 
     async def async_handle_match(self, event: Event) -> None:
         """Authorize an atomic match; restart long-running actions after cooldown."""
+        if self._stopping:
+            return
         slot = parse_slot(event.data.get("finger_id"))
         if slot is None:
             self._status("invalid_id")
@@ -264,6 +272,13 @@ class FingerprintManager:
             if pending is None or slot != pending.slot:
                 self._status("unexpected_enrollment_done", slot)
                 return
+
+            # The physical reader has completed enrollment. Disarm the timer
+            # before awaiting storage: a slow disk must not report a false
+            # timeout while the valid completion is being saved.
+            if self._cancel_timeout is not None:
+                self._cancel_timeout()
+                self._cancel_timeout = None
 
             # Keep all scans blocked until the authorization is durable.
             try:
@@ -403,6 +418,7 @@ class FingerprintManager:
 
     async def shutdown(self) -> None:
         """Stop the active action script and clear transient state."""
+        self._stopping = True
         self._dispatch_serial += 1
         self._clear_pending()
         if self._action_script is not None:

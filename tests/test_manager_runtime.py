@@ -287,6 +287,19 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.manager.last_scan["slot"], 2)
         self.assertEqual(self.manager.last_scan["status"], "action_executed")
 
+    async def test_no_match_or_queued_runner_after_unload(self):
+        """No queued matched event may resurrect an unloaded integration."""
+        await self.add(1, "A", "full")
+        self.manager._dispatch_serial = 1
+        await self.manager.shutdown()
+        await self.scan(1)
+        await self.manager._run_action_script(
+            1, 1, {"name": "A", "profile": "full"},
+            "full", Event({"finger_id": 1}).context,
+        )
+        self.assertEqual(FakeScript.calls, [])
+        self.assertEqual(FakeScript.instances, [])
+
     async def test_unload_stops_90_second_action(self):
         FakeScript.hold_runs = True
         await self.add(1, "A", "full")
@@ -317,6 +330,15 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
         self.clock += 6
         await self.scan(10)
         self.assertEqual(self.manager.last_scan["status"], "action_executed")
+
+    async def test_completed_enrollment_disarms_timeout_before_persistence(self):
+        await self.manager.start_enrollment(10, "A", "full", 2, True)
+        cancel_called = []
+        self.manager._cancel_timeout = lambda: cancel_called.append(True)
+        await self.manager.async_handle_done(Event({"finger_id": 10}))
+        self.assertEqual(cancel_called, [True])
+        self.assertEqual(self.manager.last_scan["status"], "enrollment_saved")
+        self.assertIn("10", self.manager.people)
 
     async def test_cancel_then_late_done_never_authorizes(self):
         await self.manager.start_enrollment(10, "A", "full", 2, True)

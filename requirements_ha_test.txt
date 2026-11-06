@@ -1,0 +1,3 @@
+# Both packages are published by Home Assistant and pinned to the target runtime.
+homeassistant==2026.11.0
+pytest-homeassistant==2026.11.0
