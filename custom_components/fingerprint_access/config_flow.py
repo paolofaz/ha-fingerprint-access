@@ -33,6 +33,52 @@ class FingerprintAccessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def _prefix_in_use(self, prefix: str, exclude_entry_id: str | None = None) -> bool:
+        """Check the currently configured event prefix, not the legacy unique ID."""
+        return any(
+            entry.entry_id != exclude_entry_id
+            and entry.data.get(CONF_EVENT_PREFIX) == prefix
+            for entry in self.hass.config_entries.async_entries(DOMAIN)
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Change the ESPHome event prefix without replacing the identity register."""
+        entry = self._get_reconfigure_entry()
+        errors = {}
+        if user_input is not None:
+            prefix = user_input[CONF_EVENT_PREFIX].strip()
+            if not PREFIX_PATTERN.fullmatch(prefix):
+                errors["base"] = "invalid_prefix"
+            elif self._prefix_in_use(prefix, exclude_entry_id=entry.entry_id):
+                errors["base"] = "already_configured"
+            elif (manager := self.hass.data.get(DOMAIN, {}).get(entry.entry_id)) and manager.pending:
+                errors["base"] = "enrollment_in_progress"
+            else:
+                # Existing beta entries use the initial event prefix as their unique
+                # ID. Migrate it to the stable config-entry ID so future renames
+                # never tie device identity to a mutable event name.
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates={CONF_EVENT_PREFIX: prefix},
+                    unique_id=entry.entry_id,
+                    title=f"Fingerprint Access ({prefix})",
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_EVENT_PREFIX,
+                        default=entry.data[CONF_EVENT_PREFIX],
+                    ): str
+                }
+            ),
+            errors=errors,
+        )
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -41,6 +87,8 @@ class FingerprintAccessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             prefix = user_input[CONF_EVENT_PREFIX].strip()
             if not PREFIX_PATTERN.fullmatch(prefix):
                 errors["base"] = "invalid_prefix"
+            elif self._prefix_in_use(prefix):
+                errors["base"] = "already_configured"
             else:
                 await self.async_set_unique_id(prefix)
                 self._abort_if_unique_id_configured()

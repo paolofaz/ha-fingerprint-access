@@ -4,35 +4,96 @@
       "user": {
         "title": "Aggiungi un lettore impronte",
         "description": "Inserisci il prefisso degli eventi ESPHome, ad esempio esphome.impronte3q.",
-        "data": {"event_prefix": "Prefisso eventi ESPHome"}
+        "data": {
+          "event_prefix": "Prefisso eventi ESPHome"
+        }
+      },
+      "reconfigure": {
+        "title": "Modifica il prefisso degli eventi ESPHome",
+        "description": "Inserisci il nuovo prefisso degli eventi (ad esempio esphome.impronte3q). La rubrica e i permessi vengono conservati. Modifica il prefisso solo dopo avere aggiornato ESPHome.",
+        "data": {
+          "event_prefix": "Prefisso eventi ESPHome"
+        }
       }
     },
-    "error": {"invalid_prefix": "Prefisso ESPHome non valido"}
+    "error": {
+      "invalid_prefix": "Prefisso ESPHome non valido",
+      "already_configured": "Questo prefisso è già utilizzato da un altro lettore.",
+      "enrollment_in_progress": "Termina o annulla la registrazione prima di modificare il prefisso."
+    },
+    "abort": {
+      "reconfigure_successful": "Prefisso aggiornato. L'integrazione è stata ricaricata."
+    }
   },
   "options": {
     "step": {
-      "init": {"title": "Fingerprint Access", "menu_options": {
-        "actions": "Configura le azioni", "enroll": "Registra nuova impronta",
-        "manage": "Gestisci le impronte", "cancel": "Annulla registrazione"
-      }},
-      "actions": {"title": "Profili e azioni", "description": "La modalità test non esegue alcuna azione fisica. Variabili: finger_id, person_name, profile.", "data": {
-        "test_mode": "Modalità test (nessuna azione)", "full_actions": "Azioni accesso completo",
-        "partial_actions": "Azioni accesso parziale"
-      }},
-      "enroll": {"title": "Registra impronta", "description": "Lo slot deve essere libero. Il permesso viene salvato solo dopo la conferma del lettore.", "data": {
-        "finger_id": "ID slot", "name": "Nome", "profile": "Profilo", "num_scans": "Numero scansioni",
-        "confirm_free_slot": "Ho verificato che lo slot è libero"
-      }},
-      "manage": {"title": "Scegli impronta", "data": {"finger_id": "Persona / ID"}},
-      "selected": {"title": "Gestisci impronta", "menu_options": {"edit": "Modifica", "remove": "Revoca ed elimina"}},
-      "edit": {"title": "Modifica persona", "data": {"name": "Nome", "profile": "Profilo"}},
-      "remove": {"title": "Revoca ed elimina", "description": "Il permesso viene revocato prima di chiedere la cancellazione al lettore.", "data": {"confirm_remove": "Confermo la cancellazione"}}
+      "init": {
+        "title": "Fingerprint Access",
+        "menu_options": {
+          "actions": "Configura le azioni",
+          "enroll": "Registra nuova impronta",
+          "manage": "Gestisci le impronte",
+          "cancel": "Annulla registrazione"
+        }
+      },
+      "actions": {
+        "title": "Profili e azioni",
+        "description": "La modalità test non esegue alcuna azione fisica. Variabili: finger_id, person_name, profile.",
+        "data": {
+          "test_mode": "Modalità test (nessuna azione)",
+          "full_actions": "Azioni accesso completo",
+          "partial_actions": "Azioni accesso parziale"
+        }
+      },
+      "enroll": {
+        "title": "Registra impronta",
+        "description": "Lo slot deve essere libero. Il permesso viene salvato solo dopo la conferma del lettore.",
+        "data": {
+          "finger_id": "ID slot",
+          "name": "Nome",
+          "profile": "Profilo",
+          "num_scans": "Numero scansioni",
+          "confirm_free_slot": "Ho verificato che lo slot è libero"
+        }
+      },
+      "manage": {
+        "title": "Scegli impronta",
+        "data": {
+          "finger_id": "Persona / ID"
+        }
+      },
+      "selected": {
+        "title": "Gestisci impronta",
+        "menu_options": {
+          "edit": "Modifica",
+          "remove": "Revoca ed elimina"
+        }
+      },
+      "edit": {
+        "title": "Modifica persona",
+        "data": {
+          "name": "Nome",
+          "profile": "Profilo"
+        }
+      },
+      "remove": {
+        "title": "Revoca ed elimina",
+        "description": "Il permesso viene revocato prima di chiedere la cancellazione al lettore.",
+        "data": {
+          "confirm_remove": "Confermo la cancellazione"
+        }
+      }
     },
-    "error": {"operation_failed": "Operazione non riuscita; controlla i log", "confirmation_required": "Devi confermare"},
+    "error": {
+      "operation_failed": "Operazione non riuscita; controlla i log",
+      "confirmation_required": "Devi confermare"
+    },
     "abort": {
       "enrollment_started": "Registrazione avviata; segui il lettore",
-      "enrollment_cancelled": "Registrazione annullata", "cancel_failed": "Impossibile annullare sul lettore",
-      "person_updated": "Persona aggiornata", "person_removed": "Autorizzazione revocata, cancellazione richiesta",
+      "enrollment_cancelled": "Registrazione annullata",
+      "cancel_failed": "Impossibile annullare sul lettore",
+      "person_updated": "Persona aggiornata",
+      "person_removed": "Autorizzazione revocata, cancellazione richiesta",
       "deletion_check_hardware": "Autorizzazione revocata, ma la cancellazione fisica potrebbe essere fallita",
       "no_people": "Nessuna persona presente nella rubrica"
     }

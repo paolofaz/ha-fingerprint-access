@@ -7,10 +7,22 @@
         "data": {
           "event_prefix": "ESPHome event prefix"
         }
+      },
+      "reconfigure": {
+        "title": "Change ESPHome event prefix",
+        "description": "Enter the new event prefix (for example esphome.impronte3q). Your stored names and access profiles are preserved. Update ESPHome before changing this value.",
+        "data": {
+          "event_prefix": "ESPHome event prefix"
+        }
       }
     },
     "error": {
-      "invalid_prefix": "Use esphome.<node_name> with lowercase letters, numbers and underscores."
+      "invalid_prefix": "Use esphome.<node_name> with lowercase letters, numbers and underscores.",
+      "already_configured": "Another reader already uses this event prefix.",
+      "enrollment_in_progress": "Finish or cancel enrollment before changing the event prefix."
+    },
+    "abort": {
+      "reconfigure_successful": "Event prefix updated; integration reloaded."
     }
   },
   "options": {

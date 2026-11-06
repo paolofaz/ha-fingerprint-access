@@ -1,12 +1,14 @@
 {
   "domain": "fingerprint_access",
   "name": "Fingerprint Access",
-  "version": "0.1.0b1",
+  "version": "0.1.0b2",
   "config_flow": true,
   "documentation": "https://github.com/paolofaz/ha-fingerprint-access",
   "issue_tracker": "https://github.com/paolofaz/ha-fingerprint-access/issues",
   "codeowners": [],
-  "dependencies": ["esphome"],
+  "dependencies": [
+    "esphome"
+  ],
   "iot_class": "local_push",
   "integration_type": "hub"
 }

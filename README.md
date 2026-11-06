@@ -39,6 +39,14 @@ Restart Home Assistant. Under **Settings → Devices & services → Add integrat
 search for **Fingerprint Access**. Enter the event prefix (default:
 `esphome.impronte3q`).
 
+**Need to rename the ESPHome reader later?** Under **Settings → Devices &
+services → Fingerprint Access**, open the integration entry's three-dot menu
+and choose **Reconfigure / Riconfigura**. Enter the new event prefix. The
+integration reloads its event listeners while preserving the existing register
+and action profiles. Avoid doing this during an enrollment; the reconfigure
+flow refuses while enrollment is pending. Remember to update the event names
+and ESPHome API action names in the ESPHome firmware consistently.
+
 In the integration **Configure** menu:
 
 1. **Configure access actions**: choose the sequences for *Full access* and

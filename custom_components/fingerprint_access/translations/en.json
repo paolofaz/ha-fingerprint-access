@@ -4,36 +4,98 @@
       "user": {
         "title": "Add a fingerprint reader",
         "description": "Enter ESPHome event prefix (for example esphome.impronte3q).",
-        "data": {"event_prefix": "ESPHome event prefix"}
+        "data": {
+          "event_prefix": "ESPHome event prefix"
+        }
+      },
+      "reconfigure": {
+        "title": "Change ESPHome event prefix",
+        "description": "Enter the new event prefix (for example esphome.impronte3q). Your stored names and access profiles are preserved. Update ESPHome before changing this value.",
+        "data": {
+          "event_prefix": "ESPHome event prefix"
+        }
       }
     },
-    "error": {"invalid_prefix": "Invalid ESPHome event prefix"}
+    "error": {
+      "invalid_prefix": "Invalid ESPHome event prefix",
+      "already_configured": "Another reader already uses this event prefix.",
+      "enrollment_in_progress": "Finish or cancel enrollment before changing the event prefix."
+    },
+    "abort": {
+      "reconfigure_successful": "Event prefix updated; integration reloaded."
+    }
   },
   "options": {
     "step": {
-      "init": {"title": "Fingerprint Access", "menu_options": {
-        "actions": "Configure access actions", "enroll": "Register new fingerprint",
-        "manage": "Manage fingerprints", "cancel": "Cancel enrollment"
-      }},
-      "actions": {"title": "Configure access profiles", "description": "Test mode prevents physical actions. Action variables: finger_id, person_name, profile.", "data": {
-        "test_mode": "Test mode (no actions)", "full_actions": "Full access actions",
-        "partial_actions": "Partial access actions"
-      }},
-      "enroll": {"title": "Register fingerprint", "description": "Confirm the physical slot is free. Permissions are added only after successful enrollment.", "data": {
-        "finger_id": "ID", "name": "Name", "profile": "Profile", "num_scans": "Number of scans",
-        "confirm_free_slot": "I have checked the slot is free"
-      }},
-      "manage": {"title": "Choose fingerprint", "data": {"finger_id": "Fingerprint"}},
-      "selected": {"title": "Manage fingerprint", "menu_options": {"edit": "Edit", "remove": "Revoke and delete"}},
-      "edit": {"title": "Edit person", "data": {"name": "Name", "profile": "Profile"}},
-      "remove": {"title": "Revoke and delete", "description": "Authorization will be revoked before deletion from the reader.", "data": {"confirm_remove": "Confirm deletion"}}
+      "init": {
+        "title": "Fingerprint Access",
+        "menu_options": {
+          "actions": "Configure access actions",
+          "enroll": "Register new fingerprint",
+          "manage": "Manage fingerprints",
+          "cancel": "Cancel enrollment"
+        }
+      },
+      "actions": {
+        "title": "Configure access profiles",
+        "description": "Test mode prevents physical actions. Action variables: finger_id, person_name, profile.",
+        "data": {
+          "test_mode": "Test mode (no actions)",
+          "full_actions": "Full access actions",
+          "partial_actions": "Partial access actions"
+        }
+      },
+      "enroll": {
+        "title": "Register fingerprint",
+        "description": "Confirm the physical slot is free. Permissions are added only after successful enrollment.",
+        "data": {
+          "finger_id": "ID",
+          "name": "Name",
+          "profile": "Profile",
+          "num_scans": "Number of scans",
+          "confirm_free_slot": "I have checked the slot is free"
+        }
+      },
+      "manage": {
+        "title": "Choose fingerprint",
+        "data": {
+          "finger_id": "Fingerprint"
+        }
+      },
+      "selected": {
+        "title": "Manage fingerprint",
+        "menu_options": {
+          "edit": "Edit",
+          "remove": "Revoke and delete"
+        }
+      },
+      "edit": {
+        "title": "Edit person",
+        "data": {
+          "name": "Name",
+          "profile": "Profile"
+        }
+      },
+      "remove": {
+        "title": "Revoke and delete",
+        "description": "Authorization will be revoked before deletion from the reader.",
+        "data": {
+          "confirm_remove": "Confirm deletion"
+        }
+      }
     },
-    "error": {"operation_failed": "Operation failed; check logs", "confirmation_required": "Please confirm"},
+    "error": {
+      "operation_failed": "Operation failed; check logs",
+      "confirmation_required": "Please confirm"
+    },
     "abort": {
       "enrollment_started": "Enrollment started; follow reader instructions",
-      "enrollment_cancelled": "Enrollment cancelled", "cancel_failed": "Could not cancel at reader",
-      "person_updated": "Person updated", "person_removed": "Authorization revoked and deletion requested",
-      "deletion_check_hardware": "Revoked, but deletion may have failed at reader", "no_people": "No people in the register"
+      "enrollment_cancelled": "Enrollment cancelled",
+      "cancel_failed": "Could not cancel at reader",
+      "person_updated": "Person updated",
+      "person_removed": "Authorization revoked and deletion requested",
+      "deletion_check_hardware": "Revoked, but deletion may have failed at reader",
+      "no_people": "No people in the register"
     }
   }
 }
