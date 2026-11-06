@@ -14,7 +14,17 @@ class FingerprintAccessCard extends HTMLElement {
     this._config = config;
     this._render();
   }
-  static getStubConfig() { return {entity: "sensor.registered_fingerprints"}; }
+  static getStubConfig(hass) {
+    // The assigned HA entity ID depends on the language, installation and
+    // collision handling. Discover the correct registry sensor automatically.
+    const matched = Object.entries(hass?.states || {}).find(([entityId, state]) =>
+      entityId.startsWith("sensor.") &&
+      typeof state.attributes?.entry_id === "string" &&
+      typeof state.attributes?.reader === "string" &&
+      Array.isArray(state.attributes?.people)
+    );
+    return {entity: matched?.[0] || "sensor.registered_fingerprints"};
+  }
   getCardSize() { return 7; }
   set hass(value) {
     const before = this._hass?.states[this._config?.entity];

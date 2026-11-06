@@ -192,21 +192,29 @@ or revoke an ID and request deletion from the fingerprint reader. Permissions
 continue to be enforced exclusively by the backend integration; the dashboard
 has **no editable permission helpers**.
 
-1. Install/update the integration, then restart Home Assistant.
-2. Open **Settings → Dashboards → Resources** and add a new
-   **JavaScript module** with URL:
-   `/fingerprint_access/fingerprint-access-card.js?v=0201`
-3. Open **Developer tools → States** and find the **Registered fingerprints**
-   sensor from Fingerprint Access. Use its actual entity ID; the name may vary.
-4. Add a dashboard card in **Manual** mode:
+1. Install/update the integration, then **restart Home Assistant**.
+2. **Refresh the Home Assistant frontend** (hard reload / close and reopen the app).
+3. Edit a dashboard → **Add card**, and search for **Fingerprint Access**. The
+   integration automatically registers the JavaScript module in the frontend;
+   manually adding a Lovelace resource is no longer necessary.
+4. If you want to add the card manually, use:
 
 ```yaml
 type: custom:fingerprint-access-card
 entity: sensor.registered_fingerprints
 ```
 
-The example sensor ID above must be replaced if your Home Assistant assigned a
-different one. Refresh the dashboard after adding the resource.
+When using the visual card picker, the card tries to detect the actual
+**Registered fingerprints** sensor automatically. When adding via YAML,
+replace the example entity ID if Home Assistant assigned a different one.
+The integration **registers a card**, not a new sidebar dashboard: you still
+choose where to place it.
+
+**Upgrading from 0.2.0b1?** Remove the old manually configured Lovelace
+JavaScript resource if you added one, then refresh the browser. Avoid duplicate
+resource registrations. If the card does not appear, check browser developer
+console for JavaScript load errors and that the URL
+`/fingerprint_access/fingerprint-access-card.js?v=0202` is reachable.
 
 The card reads the authorization register through the sensor's read-only
 attributes, including its internal `entry_id` for multi-reader operation.

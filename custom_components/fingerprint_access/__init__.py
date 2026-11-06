@@ -8,6 +8,7 @@ from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.components import frontend
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
@@ -44,6 +45,12 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             str(Path(__file__).parent / "frontend" / "fingerprint-access-card.js"),
             False,
         )]
+    )
+    # Register the card's ES module globally so it appears in the Lovelace
+    # card picker; users no longer have to create a resource manually.
+    # The URL query also invalidates any cached older beta card.
+    frontend.add_extra_js_url(
+        hass, "/fingerprint_access/fingerprint-access-card.js?v=0202"
     )
     slot_schema = vol.All(vol.Coerce(int), vol.Range(min=1, max=199))
     profile_schema = vol.In([PROFILE_FULL, PROFILE_PARTIAL])
