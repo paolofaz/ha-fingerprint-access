@@ -273,7 +273,7 @@ class FingerprintManager:
     def _service_name(self, suffix: str) -> tuple[str, str]:
         """Derive ESPHome native actions from a configured event prefix."""
         node = self.prefix.removeprefix("esphome.")
-        return "esphome", node + suffix
+        return "esphome", f"{node}_{suffix}"
 
     async def _call_esphome(self, suffix: str, data: dict[str, Any] | None = None) -> None:
         domain, service_name = self._service_name(suffix)

@@ -181,6 +181,7 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_enrollment_requires_confirmation_and_matching_done(self):
         await self.manager.start_enrollment(10, "A", "full", 2, True)
+        self.assertEqual(self.hass.services.calls[-1][1], "impronte3q_enroll")
         self.assertNotIn("10", self.manager.people)
         await self.manager.async_handle_done(Event({"finger_id": 11}))
         self.assertNotIn("10", self.manager.people)
@@ -195,6 +196,7 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
     async def test_cancel_then_late_done_never_authorizes(self):
         await self.manager.start_enrollment(10, "A", "full", 2, True)
         await self.manager.cancel_enrollment()
+        self.assertEqual(self.hass.services.calls[-1][1], "impronte3q_cancel_enroll")
         await self.manager.async_handle_done(Event({"finger_id": 10}))
         self.assertNotIn("10", self.manager.people)
 
