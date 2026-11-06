@@ -33,7 +33,7 @@ class RCChecks(unittest.TestCase):
 
     def test_brand_icon_and_version(self):
         obj = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(obj["version"], "1.0.0rc5")
+        self.assertEqual(obj["version"], "1.0.0")
         self.assertTrue((ROOT / "brand" / "icon.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
 
 if __name__ == "__main__":
