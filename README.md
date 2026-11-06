@@ -1,13 +1,14 @@
-# Fingerprint Access for Home Assistant — 1.0.0rc5
+# Fingerprint Access for Home Assistant — 1.0.0
 
 A custom Home Assistant integration for **ESPHome fingerprint readers**. It keeps names
 and access profiles in Home Assistant, processes **an event for each scan** and executes
 your own Home Assistant action sequences.
 
 > [!WARNING]
-> **Release candidate — not yet validated on your physical locks.**
-> Keep a manual way to enter. Before authorizing an ID, verify its Full/Partial
-> action sequence and test the actuators safely. This is not certified security hardware.
+> **Community access-control integration, not certified security hardware.**
+> Initial physical operation has been verified in one installation, but every
+> deployment must be tested with its own reader, gate, locks and alarm. Keep a
+> manual way to enter and validate both access profiles before relying on it.
 
 ## What it does
 
@@ -60,7 +61,7 @@ In the integration **Configure** menu:
    to revoke access and delete the template.
 4. **Cancel enrollment**: stop an in-progress enrollment request.
 
-**The RC has no Test mode switch.** For initial dry-run tests, temporarily
+**There is no Test mode switch.** For initial dry-run tests, temporarily
 configure harmless actions (such as notifications) or leave sequences empty
 while safely verifying ID recognition. When you configure actions that actuate
 locks, a subsequent authorized scan can open them.
@@ -192,7 +193,7 @@ The integration derives ESPHome action service names from the prefix:
 `esphome.impronte3q_cancel_enroll`,
 `esphome.impronte3q_delete`.
 
-## Lovelace card (RC5: automatic registration after HA startup)
+## Lovelace card (automatic registration after HA startup)
 
 Fingerprint Access serves its own JavaScript card and **automatically registers
 one Lovelace JavaScript module resource** in Home Assistant's resource storage
@@ -204,12 +205,12 @@ Marketplace has already had the opportunity to migrate its resources. It uses
 Home Assistant's supported collection API, checks only the exact Fingerprint
 Access URL, and never iterates through other entries to rewrite or remove them.
 An existing resource for this card is updated in place to
-`/fingerprint_access/fingerprint-access-card.js?v=100rc5`. Other resources
+`/fingerprint_access/fingerprint-access-card.js?v=100`. Other resources
 belonging to Marketplace, uConnect, or other integrations are not edited.
 
 Steps:
 
-1. Update from the GitHub `main` branch to `1.0.0rc5`.
+1. Update Fingerprint Access through Marketplace to the stable `1.0.0` release.
 2. Restart Home Assistant, so the integration can register its static file
    and schedule resource registration after startup.
 3. Refresh the browser or restart the Home Assistant mobile app.
@@ -230,7 +231,7 @@ allow integrations to register resources automatically. In that case, add
 the following to your existing `lovelace: resources:` configuration:
 
 ```yaml
-- url: /fingerprint_access/fingerprint-access-card.js?v=100rc5
+- url: /fingerprint_access/fingerprint-access-card.js?v=100
   type: module
 ```
 
@@ -243,7 +244,7 @@ The fingerprint authorization register is independent from Lovelace resources
 and remains stored in Home Assistant's own `.storage` entry. The card is
 only the management UI; all access decisions are enforced by the backend.
 
-### RC5: Fix for action failure in Home Assistant 2026.11
+### Compatibility fix for Home Assistant 2026.11
 
 RC4 could recognize a fingerprint successfully but fail before running the
 configured profile's action sequence, logging
@@ -258,7 +259,7 @@ fix a physically noisy reader, invalid ESPHome events or unavailable scripts.
 
 ### Reopening while the 90-second light timer is running
 
-The RC5 no longer holds a lock throughout a configured action sequence. A
+The integration does not hold a lock throughout a configured action sequence. A
 successful, authorized recognition starts the sequence asynchronously, and
 a new successful recognition **after the global 1.5-second cooldown** restarts
 the previous Fingerprint Access action sequence, even when switching between
@@ -307,8 +308,29 @@ content: >
   {% endfor %}
 ```
 
-To modify a person or start enrollment, use **Settings → Devices & services →
-Fingerprint Access → Configure**. The card itself has no editable permission fields.
+Administrators can enroll, update and remove fingerprints directly in the
+**Fingerprint Access Lovelace card**, or through **Settings → Devices & services →
+Fingerprint Access → Configure**. Non-administrators can view the read-only
+summary but cannot perform administrative operations; enforcement is server-side.
+
+### Upgrading from the 1.0.0 release candidates
+
+The authorization registry is stored in Home Assistant under the existing
+configuration-entry ID; upgrading from RC4/RC5 **must not** clear or re-enroll
+fingerprints. Back up your Home Assistant configuration before updating.
+The Lovelace module URL advances to `/fingerprint_access/fingerprint-access-card.js?v=100`
+automatically in storage mode; it updates only this integration's matching
+resource. Do not clean or recreate unrelated Marketplace/Lovelace resources.
+
+The 1.5-second per-reader cooldown and the 5-second post-enrollment holdoff are
+unchanged from RC5. RC4's raw-template error was fixed in RC5 and is covered by
+a real-Home-Assistant regression test in the 1.0.0 release.
+
+**Limitations:** Home Assistant bus events do not cryptographically prove a
+physical fingerprint scan. A previously started hardware command cannot be
+undone by a subsequent revocation, and the external gate/light script's
+90-second delay does not survive a Home Assistant restart. These are separate
+from the identity registry and must be considered in deployment design.
 
 ## Administration and recovery
 
@@ -346,14 +368,15 @@ python -m compileall -q custom_components tests
 python -m unittest discover -s tests -v
 ```
 
-These are pure-policy and syntax checks, **not** hardware or Home Assistant
-integration tests. No release should be used to control a real lock until
-the deployment-specific flow has been tested end to end.
+These are policy, simulated-manager and syntax checks. GitHub Actions also runs
+`tests_ha/` against the actual Home Assistant **2026.11.0** runtime using the
+official `pytest-homeassistant` package; these tests do **not** replace a
+physical reader and lock test. Verify every deployment end to end.
 
 License: MIT.
 
 
-## Release candidate field-test checklist
+## Installation safety and field-test checklist
 
 1. Back up Home Assistant and save the ESPHome YAML. Keep manual entry available.
 2. Disable all old fingerprint-opening automations; **leave the scripts chosen
