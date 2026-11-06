@@ -184,6 +184,43 @@ The integration derives ESPHome action service names from the prefix:
 `esphome.impronte3q_cancel_enroll`,
 `esphome.impronte3q_delete`.
 
+## Dedicated dashboard card (beta)
+
+The integration now includes a custom Lovelace card with a **live people table**,
+and for administrators only, forms to register people, edit their name/profile
+or revoke an ID and request deletion from the fingerprint reader. Permissions
+continue to be enforced exclusively by the backend integration; the dashboard
+has **no editable permission helpers**.
+
+1. Install/update the integration, then restart Home Assistant.
+2. Open **Settings → Dashboards → Resources** and add a new
+   **JavaScript module** with URL:
+   `/fingerprint_access/fingerprint-access-card.js?v=0201`
+3. Open **Developer tools → States** and find the **Registered fingerprints**
+   sensor from Fingerprint Access. Use its actual entity ID; the name may vary.
+4. Add a dashboard card in **Manual** mode:
+
+```yaml
+type: custom:fingerprint-access-card
+entity: sensor.registered_fingerprints
+```
+
+The example sensor ID above must be replaced if your Home Assistant assigned a
+different one. Refresh the dashboard after adding the resource.
+
+The card reads the authorization register through the sensor's read-only
+attributes, including its internal `entry_id` for multi-reader operation.
+Mutation buttons are shown only for administrator accounts; the corresponding
+backend services independently enforce administrator permission. For deletion
+the administrator must type the exact numeric slot ID; other changes also
+require explicit confirmation.
+
+**Security:** The browser-side visibility check is only a convenience, not
+a permission boundary. Do not share the dashboard with untrusted users; the
+backend actions require administrative privileges. The integration cannot
+verify whether a biometric reader slot is empty. Confirm that separately
+before enrolling, even if the UI suggests an ID.
+
 ## View the live register on a dashboard
 
 The integration adds a sensor named **Registered fingerprints**, whose state is

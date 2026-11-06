@@ -39,6 +39,7 @@ class FingerprintRegistrySensor(SensorEntity):
         """Expose the register for read-only dashboard rendering."""
         return {
             "reader": self.manager.prefix,
+            "entry_id": self.manager.entry.entry_id,
             "people": self.manager.people_list,
             "test_mode": self.manager.test_mode,
             "pending_enrollment": (

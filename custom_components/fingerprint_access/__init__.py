@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -35,6 +37,14 @@ def _runtime(hass: HomeAssistant, call: ServiceCall) -> FingerprintManager:
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Register administrator-only actions once for the integration."""
     hass.data.setdefault(DOMAIN, {})
+    # No Lovelace resource database changes: the user enables the card explicitly.
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(
+            "/fingerprint_access/fingerprint-access-card.js",
+            str(Path(__file__).parent / "frontend" / "fingerprint-access-card.js"),
+            False,
+        )]
+    )
     slot_schema = vol.All(vol.Coerce(int), vol.Range(min=1, max=199))
     profile_schema = vol.In([PROFILE_FULL, PROFILE_PARTIAL])
     entry_schema = {vol.Optional("entry_id"): cv.string}
