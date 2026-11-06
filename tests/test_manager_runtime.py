@@ -36,6 +36,21 @@ class Event:
         self.context = types.SimpleNamespace(user_id=user_id)
 
 
+class FakeTemplate:
+    """Catch the original bug: Script choose requires Template, not str."""
+
+    def __init__(self, source, hass):
+        self.template = source
+        self.hass = hass
+
+    def async_render_to_info(self, variables, parse_result=False):
+        assert parse_result is False
+        expected = "full" if "profile == 'full'" in self.template else "partial"
+        return types.SimpleNamespace(
+            result=lambda: "true" if variables["profile"] == expected else "false"
+        )
+
+
 class FakeScript:
     calls = []
     instances = []
@@ -60,8 +75,9 @@ class FakeScript:
         choices = self.actions[0]["choose"]
         matched = [
             choice["sequence"] for choice in choices
-            if ("profile == '" + variables["profile"] + "'")
-            in choice["conditions"][0]["value_template"]
+            if choice["conditions"][0]["value_template"].async_render_to_info(
+                variables, parse_result=False
+            ).result() == "true"
         ]
         assert len(matched) == 1
         self.calls.append((matched[0], variables))
@@ -146,6 +162,7 @@ module("homeassistant.helpers.dispatcher", async_dispatcher_send=lambda hass, si
 module("homeassistant.helpers.event", async_call_later=lambda hass, seconds, fn: lambda: None)
 module("homeassistant.helpers.script", SCRIPT_MODE_RESTART="restart", Script=FakeScript)
 module("homeassistant.helpers.storage", Store=Store)
+module("homeassistant.helpers.template", Template=FakeTemplate)
 
 package = module("fingerprint_access_rc")
 package.__path__ = [str(ROOT)]
@@ -200,6 +217,29 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([c[0][0]["action"] for c in FakeScript.calls],
                          ["script.full", "script.partial"])
         self.assertEqual([c[1]["finger_id"] for c in FakeScript.calls], [1, 2])
+
+    async def test_choose_uses_real_template_type_not_string(self):
+        """Previously a raw str caused an AttributeError in HA script conditions."""
+        await self.add(1, "A", "full")
+        await self.scan(1)
+        choices = FakeScript.instances[0].actions[0]["choose"]
+        for choice in choices:
+            template = choice["conditions"][0]["value_template"]
+            self.assertIsInstance(template, FakeTemplate)
+            self.assertIs(template.hass, self.hass)
+            self.assertTrue(hasattr(template, "async_render_to_info"))
+        self.assertEqual(self.manager.last_scan["status"], "action_executed")
+
+    async def test_cooldown_at_exactly_one_point_five_seconds(self):
+        await self.add(1, "A", "full")
+        await self.scan(1)
+        self.clock += 1.499
+        await self.scan(1)
+        self.assertEqual(self.manager.last_scan["status"], "cooldown_ignored")
+        self.assertEqual(len(FakeScript.calls), 1)
+        self.clock += 0.001
+        await self.scan(1)
+        self.assertEqual(len(FakeScript.calls), 2)
 
     async def test_repeat_scan_ignored_during_cooldown(self):
         await self.add(1, "A", "full")
