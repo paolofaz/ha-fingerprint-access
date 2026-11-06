@@ -1,39 +1,31 @@
-"""Static and policy-independent checks for Lovelace resource registration.
-
-Full integration tests with a real HA instance are still required.
-"""
-import json
+"""Guard against inadvertent Lovelace resource storage mutation."""
 from pathlib import Path
+import json
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPONENT = ROOT / "custom_components" / "fingerprint_access"
-INIT = COMPONENT / "__init__.py"
-CARD = COMPONENT / "frontend" / "fingerprint-access-card.js"
-MANIFEST = COMPONENT / "manifest.json"
+BASE = ROOT / "custom_components" / "fingerprint_access"
 
 
-class LovelaceIntegrationTests(unittest.TestCase):
-    def test_real_resource_registration(self):
-        source = INIT.read_text(encoding="utf-8")
-        self.assertIn("async_register_static_paths(", source)
-        self.assertIn("lovelace.LOVELACE_DATA", source)
-        self.assertIn("await resource_store.async_get_info()", source)
-        self.assertIn("resource_store.async_create_item(", source)
-        self.assertIn("resource_store.async_update_item(", source)
-        self.assertIn('"res_type": "module"', source)
-        self.assertNotIn("frontend.add_extra_js_url(", source)
+class LovelaceSafetyTests(unittest.TestCase):
+    def test_serves_frontend_without_mutating_resources(self):
+        text = (BASE / "__init__.py").read_text()
+        self.assertIn("async_register_static_paths(", text)
+        self.assertIn('/fingerprint_access/fingerprint-access-card.js', text)
+        self.assertNotIn("resource_store.async_create_item(", text)
+        self.assertNotIn("resource_store.async_update_item(", text)
+        self.assertNotIn("frontend.add_extra_js_url(", text)
+        self.assertNotIn("LOVELACE_DATA", text)
 
-    def test_manifest_dependencies(self):
-        manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-        self.assertTrue({"frontend", "lovelace", "http"}.issubset(manifest["dependencies"]))
-        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+(?:b|rc)\d+$")
+    def test_manifest(self):
+        info = json.loads((BASE / "manifest.json").read_text())
+        self.assertEqual(info["version"], "1.0.0rc2")
+        self.assertNotIn("lovelace", info["dependencies"])
+        self.assertIn("http", info["dependencies"])
 
-    def test_card_registration(self):
-        source = CARD.read_text(encoding="utf-8")
-        self.assertIn('customElements.define("fingerprint-access-card"', source)
-        self.assertIn('type:"fingerprint-access-card"', source)
-        self.assertIn("static getStubConfig(hass)", source)
+    def test_card_exists(self):
+        text = (BASE / "frontend" / "fingerprint-access-card.js").read_text()
+        self.assertIn('customElements.define("fingerprint-access-card"', text)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0rc2 — 2026-11-06
+
+- Stop automatically editing Lovelace resources at integration startup.
+- Serve the card as a JavaScript module for manual, explicit registration.
+- Document recovery steps for unrelated custom cards and frontend caches.
+- Access-control logic is unchanged from RC1.
+
 ## 1.0.0rc1 — 2026-11-06
 
 - Full and Partial access continue to support independently customizable HA action sequences.
