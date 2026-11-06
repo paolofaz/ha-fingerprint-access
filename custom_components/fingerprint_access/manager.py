@@ -17,6 +17,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.script import SCRIPT_MODE_RESTART, Script
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.template import Template
 
 from .const import (
     CONF_EVENT_PREFIX,
@@ -167,7 +168,7 @@ class FingerprintManager:
                     choices.append({
                         "conditions": [{
                             "condition": "template",
-                            "value_template": "{{ profile == '" + profile + "' }}",
+                            "value_template": Template("{{ profile == '" + profile + "' }}", self.hass),
                         }],
                         "sequence": actions,
                     })
