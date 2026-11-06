@@ -212,6 +212,22 @@ class ManagerTest(unittest.IsolatedAsyncioTestCase):
         await self.scan(1)
         self.assertEqual(len(FakeScript.calls), 2)
 
+    async def test_two_second_cooldown_exact_boundary(self):
+        """Ignore a second scan before 2s, but accept it at exactly 2s."""
+        await self.add(1, "A", "full")
+        await self.scan(1)
+        self.assertEqual(len(FakeScript.calls), 1)
+
+        self.clock = 101.999
+        await self.scan(1)
+        self.assertEqual(self.manager.last_scan["status"], "cooldown_ignored")
+        self.assertEqual(len(FakeScript.calls), 1)
+
+        self.clock = 102.0
+        await self.scan(1)
+        self.assertEqual(len(FakeScript.calls), 2)
+        self.assertEqual(self.manager.last_scan["status"], "action_executed")
+
     async def test_restart_after_cooldown_even_with_90_second_action(self):
         """Long running lights cannot lock out another authorized opening."""
         FakeScript.hold_runs = True
