@@ -36,7 +36,7 @@ def _runtime(hass: HomeAssistant, call: ServiceCall) -> FingerprintManager:
 
 
 # Increment this cache key whenever the dashboard JS changes.
-CARD_RESOURCE_URL = "/fingerprint_access/fingerprint-access-card.js?v=0203"
+CARD_RESOURCE_URL = "/fingerprint_access/fingerprint-access-card.js?v=0204"
 CARD_RESOURCE_PATH = CARD_RESOURCE_URL.partition("?")[0]
 
 

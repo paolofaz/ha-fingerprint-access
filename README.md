@@ -194,11 +194,11 @@ has **no editable permission helpers**.
 
 1. Install/update the integration from `main` and verify that
    `custom_components/fingerprint_access/manifest.json` reports
-   `0.2.0b3`. **GitHub releases are not required for HACS custom integrations.**
+   `0.2.0b4`. **GitHub releases are not required for HACS custom integrations.**
 2. Restart Home Assistant and refresh the frontend (hard reload or reopen the app).
 3. In **Settings → Dashboards → ⋮ → Resources**, verify a **JavaScript module**
    resource was registered at
-   `/fingerprint_access/fingerprint-access-card.js?v=0203`.
+   `/fingerprint_access/fingerprint-access-card.js?v=0204`.
    The integration now registers **actual Lovelace resources** when Home
    Assistant uses the default resource *storage mode*.
 4. Edit a dashboard → **Add card**, search for **Fingerprint Access**.
@@ -220,7 +220,7 @@ configuration YAML; the integration cannot edit them. Add the module yourself:
 lovelace:
   resource_mode: yaml
   resources:
-    - url: /fingerprint_access/fingerprint-access-card.js?v=0203
+    - url: /fingerprint_access/fingerprint-access-card.js?v=0204
       type: module
 ```
 
@@ -246,6 +246,18 @@ a permission boundary. Do not share the dashboard with untrusted users; the
 backend actions require administrative privileges. The integration cannot
 verify whether a biometric reader slot is empty. Confirm that separately
 before enrolling, even if the UI suggests an ID.
+
+### Repeated fingerprints and event counter (0.2.0b4)
+
+The card shows the timestamp of the last backend outcome with milliseconds and
+a **recognized scan event count since the current integration load**. This count
+increases for repeated scans of the same ID: each `_finger_matched` event counts
+even if the decision text remains `denied · ID 1`. It resets whenever the
+integration/HA is reloaded, and is intended solely for diagnostics; it does not
+influence authorization.
+
+You can also listen to `fingerprint_access_access` under Developer Tools →
+Events to see each reported decision and timestamp individually.
 
 ## View the live register on a dashboard
 

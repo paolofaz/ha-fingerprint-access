@@ -103,7 +103,21 @@ class FingerprintAccessCard extends HTMLElement {
     card.append(this._el("p", attrs.test_mode ? "MODALITÀ TEST: le azioni NON vengono eseguite." : "ATTENZIONE: le azioni sono attive.", attrs.test_mode ? "note" : "warn"));
     if (this._noticeText) card.append(this._el("p", this._noticeText, "note"));
     if (attrs.last_scan?.status) {
-      card.append(this._el("p", "Ultimo evento: " + attrs.last_scan.status + (attrs.last_scan.slot == null ? "" : " · ID " + attrs.last_scan.slot), "meta"));
+      const last = attrs.last_scan;
+      const when = last.when ? new Date(last.when) : null;
+      const clock = when && !Number.isNaN(when.getTime())
+        ? when.toLocaleTimeString("it-IT", {hour12:false, hour:"2-digit", minute:"2-digit", second:"2-digit"})
+        : "—";
+      const millis = when && !Number.isNaN(when.getTime())
+        ? "." + String(when.getMilliseconds()).padStart(3, "0")
+        : "";
+      const counter = Number.isInteger(last.matched_count)
+        ? " · Letture riconosciute: " + last.matched_count + " (dall'avvio)"
+        : "";
+      card.append(this._el("p",
+        "Ultimo evento: " + last.status +
+        (last.slot == null ? "" : " · ID " + last.slot) +
+        " · " + clock + millis + counter, "meta"));
     }
     if (attrs.pending_enrollment != null) {
       const row = this._el("div", null, "buttons");

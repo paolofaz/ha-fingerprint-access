@@ -1,7 +1,7 @@
 {
   "domain": "fingerprint_access",
   "name": "Fingerprint Access",
-  "version": "0.2.0b3",
+  "version": "0.2.0b4",
   "config_flow": true,
   "documentation": "https://github.com/paolofaz/ha-fingerprint-access",
   "issue_tracker": "https://github.com/paolofaz/ha-fingerprint-access/issues",

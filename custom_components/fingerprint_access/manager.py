@@ -59,6 +59,8 @@ class FingerprintManager:
         self.pending: PendingEnrollment | None = None
         self._cancel_timeout = None
         self.last_scan: dict[str, Any] = {}
+        # Diagnostic only: counts recognition events since this HA entry was loaded.
+        self._matched_count = 0
 
     @property
     def signal(self) -> str:
@@ -106,7 +108,8 @@ class FingerprintManager:
         self.last_scan = {
             "status": status,
             "slot": slot,
-            "when": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "when": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+            "matched_count": self._matched_count,
             **kwargs,
         }
         self.notify()
@@ -134,6 +137,7 @@ class FingerprintManager:
 
     @callback
     def _on_match(self, event: Event) -> None:
+        self._matched_count += 1
         self.hass.async_create_task(self.async_handle_match(event))
 
     async def async_handle_match(self, event: Event) -> None:
