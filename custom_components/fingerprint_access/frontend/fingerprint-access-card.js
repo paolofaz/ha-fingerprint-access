@@ -1,4 +1,4 @@
-/* Fingerprint Access – responsive Lovelace card, Release Candidate.
+/* Fingerprint Access – responsive Lovelace card, stable release.
    The backend, not the card, enforces all access permissions. */
 class FingerprintAccessCard extends HTMLElement {
   constructor() {
