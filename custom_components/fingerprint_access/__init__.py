@@ -10,13 +10,21 @@ import voluptuous as vol
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.core import (
+    CoreState,
+    EVENT_HOMEASSISTANT_STARTED,
+    HomeAssistant,
+    ServiceCall,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import service as service_helper
 from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, PROFILE_FULL, PROFILE_PARTIAL
 from .manager import FingerprintManager
+from .lovelace_resource import async_register_lovelace_resource
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
@@ -46,7 +54,25 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             False,
         )]
     )
-    # Resource registry is user-managed; never modify Lovelace resources here.
+    # Register only our own card once HA has finished starting. This avoids
+    # racing Marketplace's startup migration of the shared resource collection.
+    async def register_after_startup() -> None:
+        try:
+            await async_register_lovelace_resource(hass)
+        except Exception:
+            _LOGGER.exception(
+                "Could not auto-register Fingerprint Access Lovelace resource"
+            )
+
+    if hass.state is CoreState.running:
+        hass.async_create_task(register_after_startup())
+    else:
+        @callback
+        def on_homeassistant_started(_event) -> None:
+            hass.async_create_task(register_after_startup())
+
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, on_homeassistant_started)
+
     slot_schema = vol.All(vol.Coerce(int), vol.Range(min=1, max=199))
     profile_schema = vol.In([PROFILE_FULL, PROFILE_PARTIAL])
     entry_schema = {vol.Optional("entry_id"): cv.string}

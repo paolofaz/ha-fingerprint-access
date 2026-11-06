@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0rc3 — 2026-11-06
+
+- Automatically register the Lovelace module resource **after HA startup**
+  using the supported Home Assistant resource collection API.
+- Create or update only the exact Fingerprint Access resource URL.
+- Preserve all Marketplace/custom card entries; stop without changes if
+  multiple Fingerprint Access resources exist.
+- Keep YAML resource-mode configuration manual, since it is user-owned.
+- Add behavioral regression tests covering preserved other resources,
+  idempotency, updates, duplicates, and YAML mode.
+- Reader and authorization behavior unchanged from RC2.
+
+
 ## 1.0.0rc2 — 2026-11-06
 
 - Stop automatically editing Lovelace resources at integration startup.
